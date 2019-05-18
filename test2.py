@@ -1,5 +1,13 @@
 #coding=utf-8
 #看了一下这个比赛的数据，个人觉得这个数据很难再进行补充了，可能会用到one-hot编码之类的东西吧
+#太难受了，这个版本主要调试一下data_all["runtime"].fillna(data_all["runtime"].dropna().mean(), inplace=True)
+#以及data_all["spoken_languages"].fillna(data_all["spoken_languages"].dropna().mode()[0], inplace=True)
+#以及data_all["spoken_languages"].iloc[150] = "[{'iso_639_1': 'en', 'name': 'English'}]"都无法填充为空的元素？？真的难受为什么
+#老子心态崩盘了，上面三行代码的问题在家无法解决，在这边不需要修改代码可以直接运行，这是什么情况，难道是dataframe版本不同之类的缘故？？
+#excel中的日期存在两种表示方式，可能这两种表示方式暴露了额外的信息，但是目前不打算再利用。
+#excel内部可以统一日期表示方式，但是造成了read_csv报错，目前已经采用了设置encoding的方式进行解决
+#这个比赛有个大BUG，可以自行使用imdb中的数据，相当于是说，能够搞到更多数据的人自然就可以占据更大的优势
+#关了eclipse重新打开好像就可以了，之前家里面的电脑除了关机没进行别的操作
 import ast
 import pickle
 import numpy as np
@@ -16,12 +24,12 @@ from hyperopt import fmin, tpe, hp, space_eval, rand, Trials, partial, STATUS_OK
 from sklearn.feature_extraction import DictVectorizer
 
 #读取数据并合并咯
-data_train = pd.read_csv("train.csv")
-data_test = pd.read_csv("test.csv")
+data_train = pd.read_csv("train.csv", encoding="ANSI")
+data_test = pd.read_csv("test.csv", encoding="ANSI")
 temp = data_train["revenue"]
 data_all = pd.concat([data_train, data_test], axis=0)
-#X_all = data_all.drop(["id","revenue"], axis=1)
 data_all = data_all.drop(["id","revenue"], axis=1)
+#X_all = data_all.drop(["id","revenue"], axis=1)
 
 #直接将belongs_to_collection的数据删除了吗，主要感觉不知道怎么用
 #这样吧，直接将其替换为有无，这样从信息的角度上看，应该信息更丰富一些
@@ -31,14 +39,13 @@ data_all.loc[(data_all.belongs_to_collection.isnull()), 'belongs_to_collection']
 #处理budget属性就直接用很简单的平均数代替了吧
 #data_all["budget"].fillna(data_all["budget"].mode()[0], inplace=True) 
 #均值 np.mean(nums) #中位数 np.median(nums) #众数 np.mode()[0]
-data_all["budget"].fillna(data_all["budget"].mean(), inplace=True)
+data_all["budget"].fillna(data_all["budget"].dropna().mean(), inplace=True)
 
-"""
 #genres的特征应该如何处理，感觉好像很麻烦的样子
 #由于genres存在为空的情况，所以先将空的填充为[]
 #下面整理好了所有的genres下面的类比
 #data_all["genres"].fillna("[]", inplace=True)
-data_all["genres"].fillna(data_all["genres"].mode()[0], inplace=True) 
+data_all["genres"].fillna(data_all["genres"].dropna().mode()[0], inplace=True) 
 genres_list = []
 for i in range(0, len(data_all)):
     #这边如果不使用iloc那么结果就是错误的，取得的对象是str类型的
@@ -68,9 +75,10 @@ data_all = pd.concat([data_all, genres_df], axis=1)
 data_all.loc[(data_all.homepage.notnull()), 'homepage'] = "not null"
 data_all.loc[(data_all.homepage.isnull()), 'homepage'] = "null"
 #考虑处理imdb_id这个特征咯
+data_all.loc[(data_all.imdb_id.notnull()), 'imdb_id'] = "not null"
 data_all.loc[(data_all.imdb_id.isnull()), 'imdb_id'] = "null"
 #考虑处理original_language这个特征咯
-data_all["original_language"].fillna(data_all["original_language"].mode()[0], inplace=True)
+data_all["original_language"].fillna(data_all["original_language"].dropna().mode()[0], inplace=True)
 #考虑处理original_title这个特征咯,暂时不知道咋用直接粗暴使用
 data_all.loc[(data_all.original_title.notnull()), 'original_title'] = "not null"
 data_all.loc[(data_all.original_title.isnull()), 'original_title'] = "null"
@@ -78,11 +86,12 @@ data_all.loc[(data_all.original_title.isnull()), 'original_title'] = "null"
 data_all.loc[(data_all.overview.notnull()), 'overview'] = "not null"
 data_all.loc[(data_all.overview.isnull()), 'overview'] = "null"
 #考虑处理popularity这个特征咯,暂时不知道咋用直接粗暴使用
-data_all["popularity"].fillna(data_all["popularity"].mean(), inplace=True)
+data_all["popularity"].fillna(data_all["popularity"].dropna().mean(), inplace=True)
 #考虑处理poster_path这个特征咯,暂时不知道咋用直接粗暴使用
 data_all.loc[(data_all.poster_path.notnull()), 'poster_path'] = "not null"
 data_all.loc[(data_all.poster_path.isnull()), 'poster_path'] = "null"
 
+"""
 #考虑处理production_companies这个特征咯,暂时不知道咋用直接粗暴使用
 #data_all["production_companies"].fillna("[{'name': 'null', 'id': 4}]", inplace=True)
 data_all["production_companies"].fillna(data_all["production_companies"].mode()[0], inplace=True) 
@@ -106,10 +115,13 @@ for i in range(0, len(data_all)):
 #丢弃data_all中的genres特征，然后合并新的genres_df
 data_all = data_all.drop(["production_companies"], axis=1)
 data_all = pd.concat([data_all, companies_df], axis=1)
+"""
+
+data_all = data_all.drop(["production_companies"], axis=1)
 
 #考虑处理production_countries这个特征咯
 #data_all["production_countries"].fillna("[{'iso_3166_1': 'null', 'name': 'null'}]", inplace=True)
-data_all["production_countries"].fillna(data_all["production_countries"].mode()[0], inplace=True) 
+data_all["production_countries"].fillna(data_all["production_countries"].dropna().mode()[0], inplace=True) 
 countries_list = []
 for i in range(0, len(data_all)):
     dict_list = ast.literal_eval(data_all.iloc[i]["production_countries"])
@@ -130,7 +142,6 @@ for i in range(0, len(data_all)):
 #丢弃data_all中的genres特征，然后合并新的genres_df
 data_all = data_all.drop(["production_countries"], axis=1)
 data_all = pd.concat([data_all, countries_df], axis=1)
-"""
 
 """
 #考虑处理release_date这个特征咯,我觉得这个特征可以拆分为年和月
@@ -179,34 +190,39 @@ data_all = data_all.drop(["release_date"], axis=1)
 data_all = pd.concat([data_all, years_df, months_df], axis=1)
 """
 
-"""
-#我的天，惊呆我了，excel里面release_date有两种表示方式，但是DataFrame里面只有一种。
-#还好我及时发现了这个问题，但是感觉上面的代码都白写了呀，还是准备重写吧
-data_all["release_date"].fillna(data_all["release_date"].mode()[0], inplace=True) 
+#我的天，惊呆我了，excel里面release_date有两种表示方式，但是可以通过excel进行统一设计。
+#还好我及时发现了这个问题，但是感觉上面的代码都白写了呀，还是准备重写吧。
+#其实我倒是觉得，不一样的日期方式可能暴露了额外的信息哦。
+data_all["release_date"].fillna(data_all["release_date"].dropna().mode()[0], inplace=True) 
 years_list = []
-months_list = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12']
+months_list = ['release_month=1', 'release_month=2', 'release_month=3', 'release_month=4', 
+               'release_month=5', 'release_month=6', 'release_month=7', 'release_month=8', 
+               'release_month=9', 'release_month=10', 'release_month=11', 'release_month=12']
 for i in range(0, len(data_all)):
     temp = data_all.iloc[i]["release_date"].split('/')
-    if(temp[2] not in years_list):
-        years_list.append(temp[2])
+    if(str("release_year="+temp[2]) not in years_list):
+        years_list.append(str("release_year="+temp[2]))
 data = np.zeros((len(data_all), len(years_list)))
 years_df = pd.DataFrame(data, columns=years_list, index=data_all.index.values)
 data = np.zeros((len(data_all), len(months_list)))
 months_df = pd.DataFrame(data, columns=months_list, index=data_all.index.values)        
 for i in range(0, len(data_all)):
     temp = data_all.iloc[i]["release_date"].split('/')
-    years_df.iloc[i][temp[2]] = 1
-    months_df.iloc[i][temp[0]] = 1
+    years_df.iloc[i][str("release_year="+temp[2])] = 1
+    months_df.iloc[i][str("release_month="+temp[0])] = 1
 data_all = data_all.drop(["release_date"], axis=1)
 data_all = pd.concat([data_all, years_df, months_df], axis=1)
 
-data_all["runtime"].fillna(data_all["runtime"].mean(), inplace=True)
-"""
+data_all["runtime"].fillna(data_all["runtime"].dropna().mean(), inplace=True)
 
 #准备处理spoken_languages这个特征咯
-data_all["spoken_languages"].fillna(data_all["spoken_languages"].mode()[0], inplace=True) 
+#spoken_languages无法被赋值，我真的是想要哭了，为什么这样对我？？
+#我的天那，
+data_all["spoken_languages"].fillna(data_all["spoken_languages"].dropna().mode()[0], inplace=True)
+data_all["spoken_languages"].iloc[150] = "[{'iso_639_1': 'en', 'name': 'English'}]"
 languages_list = []
 for i in range(0, len(data_all)):
+    #print(i)
     dict_list = ast.literal_eval(data_all.iloc[i]["spoken_languages"])
     for j in range(0, len(dict_list)):
         name = dict_list[j]["iso_639_1"]
@@ -236,10 +252,13 @@ data_all.loc[(data_all.tagline.notnull()), 'tagline'] = "not null"
 data_all.loc[(data_all.title.isnull()), 'title'] = "null"
 data_all.loc[(data_all.title.notnull()), 'title'] = "not null"
 
+"""
+#这个也是有一万多个关键词暂时还是不用吧
 #考虑处理Keywords这个特征咯,暂时不知道咋用直接粗暴使用
-data_all["Keywords"].fillna(data_all["Keywords"].mode()[0], inplace=True) 
+data_all["Keywords"].fillna(data_all["Keywords"].dropna().mode()[0], inplace=True) 
 Keywords_list = []
 for i in range(0, len(data_all)):
+    print(i)
     dict_list = ast.literal_eval(data_all.iloc[i]["Keywords"])
     for j in range(0, len(dict_list)):
         name = dict_list[j]["name"]
@@ -257,7 +276,9 @@ for i in range(0, len(data_all)):
         Keywords_df.iloc[i][name] = 1
 data_all = data_all.drop(["Keywords"], axis=1)
 data_all = pd.concat([data_all, Keywords_df], axis=1)
+"""
 
+"""
 #考虑处理cast这个特征咯,暂时不知道咋用直接粗暴使用
 data_all["cast"].fillna(data_all["cast"].mode()[0], inplace=True) 
 cast_list = []
@@ -301,6 +322,16 @@ for i in range(0, len(data_all)):
         crew_df.iloc[i][name] = 1
 data_all = data_all.drop(["crew"], axis=1)
 data_all = pd.concat([data_all, crew_df], axis=1)
+"""
+data_all = data_all.drop(["Keywords"], axis=1)
+data_all = data_all.drop(["cast"], axis=1)
+data_all = data_all.drop(["crew"], axis=1)
+
+#检查一下经过特征处理以后是否还存在空值
+#居然runtime存在空值，所以dataframe的fillna真他吗失效了。。
+#1335 2302 243 1489 1632 3817行的数据居然存在空值，我觉得很不可思议
+#data_all.isnull().sum(axis=0)可以显示每列为空的数量
+print(data_all[data_all.isnull().values==True])
 
 #将数据形成one-hot编码
 dict_vector = DictVectorizer(sparse=False)
@@ -317,7 +348,6 @@ Y_train = data_train["revenue"]
 X_train_scaled.to_csv("train_scaled.csv", index=False)
 X_test_scaled.to_csv("test_scaled.csv", index=False)
 
-print("mother fucker.")
 #接下来是数据相关性的一些分析以及特征选择了吧，我先自己手动清理一些特征吧，再用算法选择特征咯
 #也就是先将梳理出来的特征和最后的回报做一些关联吧，不然感觉特征都有尼玛十万个了
 
