@@ -266,7 +266,7 @@ xgb_space_nodes = {"title":["stacked_don't_overfit!_II"],
                    "n_estimators":np.linspace(50, 500, 46)
                    }
 
-
+"""
 #这样吧，我今天先用lasso xgboost 以及catboost分别提交一个超参搜索的版本吧
 rfc_model = XGBRegressor(random_state=42).fit(X_train_scaled, Y_train)
 perm = PermutationImportance(rfc_model, random_state=42).fit(X_train_scaled, Y_train)
@@ -289,7 +289,7 @@ Y_pred = rsg.predict(X_test_scaled)
 data = {"id":data_test["id"], "revenue":Y_pred}
 output = pd.DataFrame(data = data)            
 output.to_csv("xgb_predicton.csv", index=False)
-
+"""
 
 """
 #这个是将Y_train进行log之后的版本，不知道是否能够起到作用呢，我个人推测应该不行吧
@@ -322,3 +322,38 @@ data = {"id":data_test["id"], "revenue":Y_pred}
 output = pd.DataFrame(data = data)            
 output.to_csv("xgb_predicton.csv", index=False)
 """
+
+#首先是总结一下house-prices的相关的kernel
+#今天看了一下https://www.kaggle.com/tripidhoble/house-prices-predictions
+#我觉得别人在这个缺失数据方面做得非常的细致，在填充之前先确认了缺失的程度（缺失百分比）
+#卧槽还可以直接使用from sklearn.impute import SimpleImputer填充缺失的数字数据和种类数据
+#但是为什么他们每次比赛的时候都需要做一次相关性检验呀，难道直接给学习器让它自行选择不好吗
+#可以在一开始的时候直接调用train_data.isnull().sum()
+#有些重要的数据可以通过分类器对重要的缺失参数进行赋值，比较典型的模型就是逻辑回归之类的模型
+#这个house_prices根本没有做一些特征选择或者特征处理的相关东西。
+#https://www.kaggle.com/juliencs/a-study-on-regression-applied-to-the-ames-dataset
+#上面的kernel In[8]的部分好像明显有问题的吧，应该用类似one-hot编码的方式进行实现
+#In[9]中的create feature simplifications of existing features似乎有待商榷呀
+#In[9]中的create feature 2* Combinations of existing features似乎有点东西 加深了我对特征工程的理解
+#In[10]中的 Find most important features relative to target corr = train.corr()
+#In[11]中还创造了三次的特征关系，我觉得以后这些东西可能需要用库自动排列组合特征了吧？
+#In[12]中categorical_features和numerical_features感觉做的蛮好的
+#In[14]中skewness计算并对超过0.5的数据进行log
+#进行了四个模型的训练，然后才对特征进行了选择（使用和丢弃）
+#https://www.kaggle.com/humananalog/xgboost-lasso
+#这个kernel使用了from sklearn.metrics import mean_squared_error
+#这里的特征工程做的特别的细，感觉很难理解其中的含义吧
+#特征缩放之前先进行skewed处理特征咯
+#https://www.kaggle.com/serigne/stacked-regressions-top-4-on-leaderboard
+#这里面的Outliers可能以后需要借鉴的吧
+#In[7]之类的画图可能也是我们需要积累的吧
+#boxcox1p也是log以外的一种数据处理方式咯
+#我真的觉得这些狗币看了数据的相关性或者是分布之后并没有做什么卵事情呢
+
+#然后是总结一下titanic的相关的kernel
+#https://www.kaggle.com/startupsci/titanic-data-science-solutions
+#基本上面就是完整的数据科学处理流程，不论是使用神经网络还是采用传统模型都可以借鉴吧
+#剩下的部分都在我的代码里面咯
+
+#然后是实现carboost的超参搜索
+#然后是阅读这个比赛的kernel

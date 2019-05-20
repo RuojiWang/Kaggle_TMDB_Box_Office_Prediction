@@ -31,6 +31,15 @@ data_all = pd.concat([data_train, data_test], axis=0)
 data_all = data_all.drop(["id","revenue"], axis=1)
 #X_all = data_all.drop(["id","revenue"], axis=1)
 
+#先看一哈总体缺失的内容到底有什么
+#
+#belongs_to_collection    缺失5917多条
+#Keywords                  缺失669多条
+#homepage                 缺失5032多条
+#production_companies      缺失414多条
+#tagline                  缺失1460多条
+print(data_all.isnull().sum())
+
 #直接将belongs_to_collection的数据删除了吗，主要感觉不知道怎么用
 #这样吧，直接将其替换为有无，这样从信息的角度上看，应该信息更丰富一些
 #data_all.drop(["belongs_to_collection"], axis=1)
