@@ -266,6 +266,13 @@ xgb_space_nodes = {"title":["stacked_don't_overfit!_II"],
                    "n_estimators":np.linspace(50, 500, 46)
                    }
 
+#mother fucker终于找到catboost的调参指南了 https://www.jqr.com/article/000136
+#https://blog.csdn.net/linxid/article/details/80723811
+#https://blog.csdn.net/AiirrrrYee/article/details/78224232
+#我仔细看了一下我觉得catboost还是挺值得学习的一个模型，因为综合性能不输xgboost
+rsg = CatBoostRegressor()
+
+
 """
 #这样吧，我今天先用lasso xgboost 以及catboost分别提交一个超参搜索的版本吧
 rfc_model = XGBRegressor(random_state=42).fit(X_train_scaled, Y_train)
@@ -353,7 +360,15 @@ output.to_csv("xgb_predicton.csv", index=False)
 #然后是总结一下titanic的相关的kernel
 #https://www.kaggle.com/startupsci/titanic-data-science-solutions
 #基本上面就是完整的数据科学处理流程，不论是使用神经网络还是采用传统模型都可以借鉴吧
-#剩下的部分都在我的代码里面咯
+#剩下的部分都在我的代码里面咯，所以神经网络就是很花计算资源比较吃数据总量，不用做特征工程很方便
 
-#然后是实现carboost的超参搜索
+#现在总结一下通用的机器学习流程吧
+#（1）在填充之前先确认了缺失的程度（缺失百分比）
+#（2）然后使用均值和众数填充缺失值
+#（3）使用skewness，并查看数据的分布或者与待拟合数据关系
+#（4）然后对数据进行相关性检查，并对重要缺失数据采用简单模型进行拟合
+#（5）然后是各种尝试从现有的特征中创造出新的特征加入到模型中咯
+#（6）在输入到学习器之前先进行一次特征选择熬
+#（7）我觉得神经网络的部分就是自己增加噪音咯，以获取更多的数据咯
+
 #然后是阅读这个比赛的kernel
