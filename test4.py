@@ -232,7 +232,7 @@ def train_xgb_model(best_nodes, X_train_scaled, Y_train):
     Y_pred = rsg.predict(X_train_scaled)
     print("mse:", np.mean((Y_pred-Y_train)**2))
     print("rmse:", np.sqrt(np.mean((Y_pred-Y_train)**2)))
-    return rsg   
+    return rsg
 
 xgb_space = {"title":hp.choice("title", ["stacked_don't_overfit!_II"]),
              "path":hp.choice("path", ["Don't_Overfit!_II_Prediction.csv"]),
@@ -241,16 +241,47 @@ xgb_space = {"title":hp.choice("title", ["stacked_don't_overfit!_II"]),
              #"feature_num":hp.choice("feature_num", np.linspace(1,300,300)),
              "gamma":hp.choice("gamma", [0.05, 0.06, 0.07, 0.08, 0.09, 0.10, 0.3, 0.5, 0.7, 0.9]),
              "max_depth":hp.choice("max_depth", [3, 5, 7, 9, 12, 15, 17, 25]),
-             "learning_rate":hp.choice("learning_rate", np.linspace(0.01, 0.50, 50)),
+             "learning_rate":hp.choice("learning_rate", np.linspace(0.01, 0.30, 30)),
              "min_child_weight":hp.choice("min_child_weight", [1, 3, 5, 7, 9]),
              "subsample":hp.choice("subsample", [0.6, 0.7, 0.8, 0.9, 1.0]),
              "colsample_bytree":hp.choice("colsample_bytree", [0.6, 0.7, 0.8, 0.9, 1.0]),
              "reg_alpha":hp.choice("reg_alpha", [0.0, 0.1, 0.5, 1.0]),
-             "reg_lambda":hp.choice("reg_lambda", [0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.10, 1.0]),
-             "n_estimators":hp.choice("n_estimators", np.linspace(50, 500, 46))
+             "reg_lambda":hp.choice("reg_lambda", [0.01, 0.03, 0.05, 0.07, 0.09, 0.5, 0.7, 0.9, 1.0]),
+             "n_estimators":hp.choice("n_estimators", np.linspace(50, 300, 26))
              }
 
 xgb_space_nodes = {"title":["stacked_don't_overfit!_II"],
+                   "path":["Don't_Overfit!_II_Prediction.csv"],
+                   "mean":[0],
+                   "std":[0],
+                   #"feature_num":np.linspace(1,300,300),
+                   "gamma":[0.05, 0.06, 0.07, 0.08, 0.09, 0.10, 0.3, 0.5, 0.7, 0.9],
+                   "max_depth":[3, 5, 7, 9, 12, 15, 17, 25],
+                   "learning_rate":np.linspace(0.01, 0.30, 30),
+                   "min_child_weight":[1, 3, 5, 7, 9],
+                   "subsample":[0.6, 0.7, 0.8, 0.9, 1.0],
+                   "colsample_bytree":[0.6, 0.7, 0.8, 0.9, 1.0],
+                   "reg_alpha":[0.0, 0.1, 0.5, 1.0],
+                   "reg_lambda":[0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.10, 1.0],
+                   "n_estimators":np.linspace(50, 300, 26)
+                   }
+
+cat_space = {"title":hp.choice("title", ["stacked_don't_overfit!_II"]),
+             "path":hp.choice("path", ["Don't_Overfit!_II_Prediction.csv"]),
+             "mean":hp.choice("mean", [0]),
+             "std":hp.choice("std", [0]),
+             "iterations":hp.choice("iterations", np.linspace(500, 800, 4)),
+             "learning_rate":hp.choice("learning_rate", np.linspace(0.01, 0.30, 30)),
+             "depth":hp.choice("depth", [3, 4, 5, 6, 8, 9, 11]),
+             #"l2_leaf_reg":hp.choice("l2_leaf_reg", [3, 4, 5, 6, 8, 9, 11]),
+             #"n_estimators":hp.choice("n_estimators", [3, 4, 5, 6, 8, 9, 11]),
+             #"loss_function":hp.choice("loss_function", ["RMSE"]),
+             "custom_metric":hp.choice("custom_metric", ["RMSE"]),
+             "partition_random_seed":hp.choice("partition_random_seed", [42]),
+             "n_estimators":hp.choice("n_estimators", np.linspace(50, 500, 46))
+             }
+
+cat_space_nodes = {"title":["stacked_don't_overfit!_II"],
                    "path":["Don't_Overfit!_II_Prediction.csv"],
                    "mean":[0],
                    "std":[0],
