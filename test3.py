@@ -1,4 +1,8 @@
 #coding=utf-8
+#这个版本对于数据可视化进行了探索并没有效果咯,积累了特征选择等相关功能咯
+#实现了lasso和xgboost的超参搜索，并对代码进行了一些优化吧
+#他妈了隔壁熬，我之前设置的搜索10000次运行了很久都没运行完熬，改成7000 3000 最后修改成700咯
+#然后提交了两个xgboost超参搜索700次的预测结果，第二预测也就是经过log处理的已经进入前50%咯，感觉有进步就是很开心的事情咯
 import ast
 import pickle
 import numpy as np
@@ -328,6 +332,7 @@ plt.show()
 data_train[['revenue', 'runtime']].groupby(['runtime']).mean().plot.bar()
 """
 
+"""
 #这样吧，我今天先用lasso xgboost 以及catboost分别提交一个超参搜索的版本吧
 #lasso的版本无法进行Y_train = np.log(Y_train)否则无法选择出特征咯
 rfc_model = Lasso(random_state=42).fit(X_train_scaled, Y_train)
@@ -352,3 +357,57 @@ Y_pred = rsg.predict(X_test_scaled)
 data = {"id":data_test["id"], "revenue":Y_pred}
 output = pd.DataFrame(data = data)            
 output.to_csv("lasso_predicton.csv", index=False)
+"""
+
+rfc_model = XGBRegressor(random_state=42).fit(X_train_scaled, Y_train)
+perm = PermutationImportance(rfc_model, random_state=42).fit(X_train_scaled, Y_train)
+feature_importances1 = perm.feature_importances_#这是返回每个特征的权重
+feature_importances_std = perm.feature_importances_std_ 
+feature_importances2 = np.where(feature_importances1>0)#此时我记录下了每个特征的列数
+X_train_scaled_new = X_train_scaled[X_train_scaled.columns[feature_importances2]]
+X_test_scaled_new = X_test_scaled[X_test_scaled.columns[feature_importances2]]
+X_train_scaled = X_train_scaled_new
+X_test_scaled = X_test_scaled_new
+
+trials = Trials()
+algo = partial(tpe.suggest, n_startup_jobs=10)
+best = fmin(xgb_f, xgb_space, algo=tpe.suggest, max_evals=1, trials=trials)#一共这么多种组合1012000000
+best_nodes = parse_xgb_nodes(trials, xgb_space_nodes)
+save_inter_params(trials, xgb_space_nodes, best_nodes, "tmdb_box_office_prediction")
+rsg = train_xgb_model(best_nodes, X_train_scaled, Y_train)
+
+Y_pred = rsg.predict(X_test_scaled)
+data = {"id":data_test["id"], "revenue":Y_pred}
+output = pd.DataFrame(data = data)            
+output.to_csv("xgb_predicton_1.csv", index=False)
+
+
+#这个是将Y_train进行log之后的版本，不知道是否能够起到作用呢，我个人推测应该不行吧
+Y_train = np.log(Y_train)
+rfc_model = XGBRegressor(random_state=42).fit(X_train_scaled, Y_train)
+perm = PermutationImportance(rfc_model, random_state=42).fit(X_train_scaled, Y_train)
+feature_importances1 = perm.feature_importances_#这是返回每个特征的权重
+feature_importances_std = perm.feature_importances_std_ 
+feature_importances2 = np.where(feature_importances1>0)#此时我记录下了每个特征的列数
+X_train_scaled_new = X_train_scaled[X_train_scaled.columns[feature_importances2]]
+X_test_scaled_new = X_test_scaled[X_test_scaled.columns[feature_importances2]]
+X_train_scaled = X_train_scaled_new
+X_test_scaled = X_test_scaled_new
+
+trials = Trials()
+algo = partial(tpe.suggest, n_startup_jobs=10)
+best = fmin(xgb_f, xgb_space, algo=tpe.suggest, max_evals=1, trials=trials)#一共这么多种组合1012000000
+best_nodes = parse_xgb_nodes(trials, xgb_space_nodes)
+save_inter_params(trials, xgb_space_nodes, best_nodes, "tmdb_box_office_prediction")
+rsg = train_xgb_model(best_nodes, X_train_scaled, Y_train)
+T_pred = rsg.predict(X_train_scaled)
+T_pred = np.exp(T_pred)
+Y_train = np.exp(Y_train)
+print("mse:", np.mean((T_pred-Y_train)**2))
+print("rmse:", np.sqrt(np.mean((T_pred-Y_train)**2)))
+
+Y_pred = rsg.predict(X_test_scaled)
+Y_pred = np.exp(Y_pred)
+data = {"id":data_test["id"], "revenue":Y_pred}
+output = pd.DataFrame(data = data)            
+output.to_csv("xgb_predicton_2.csv", index=False)
