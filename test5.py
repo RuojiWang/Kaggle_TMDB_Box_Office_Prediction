@@ -1,62 +1,7 @@
 #coding=utf-8
-#这个版本总结了一下titanic、house-prices的相关的kernel
-#现在总结一下通用的机器学习流程吧
-#（1）在填充之前先确认了缺失的程度（缺失百分比）
-#（2）然后使用均值和众数填充缺失值
-#（3）使用skewness，并查看数据的分布或者与待拟合数据关系
-#（4）然后对数据进行相关性检查，并对重要缺失数据采用简单模型进行拟合
-#（5）然后是各种尝试从现有的特征中创造出新的特征加入到模型中咯
-#（6）在输入到学习器之前先进行一次特征选择熬，特征选择和组合不同的模型相差很多（还有使用肉眼选择的），不再统一归纳。
-#（7）我觉得神经网络的部分就是自己增加噪音咯，以获取更多的数据咯
-
-#首先是总结一下house-prices的相关的kernel
-#今天看了一下https://www.kaggle.com/tripidhoble/house-prices-predictions
-#我觉得别人在这个缺失数据方面做得非常的细致，在填充之前先确认了缺失的程度（缺失百分比）
-#卧槽还可以直接使用from sklearn.impute import SimpleImputer填充缺失的数字数据和种类数据
-#但是为什么他们每次比赛的时候都需要做一次相关性检验呀，难道直接给学习器让它自行选择不好吗
-#可以在一开始的时候直接调用train_data.isnull().sum()
-#有些重要的数据可以通过分类器对重要的缺失参数进行赋值，比较典型的模型就是逻辑回归之类的模型
-#这个house_prices根本没有做一些特征选择或者特征处理的相关东西。
-#https://www.kaggle.com/juliencs/a-study-on-regression-applied-to-the-ames-dataset
-#上面的kernel In[8]的部分好像明显有问题的吧，应该用类似one-hot编码的方式进行实现
-#In[9]中的create feature simplifications of existing features似乎有待商榷呀
-#In[9]中的create feature 2* Combinations of existing features似乎有点东西 加深了我对特征工程的理解
-#In[10]中的 Find most important features relative to target corr = train.corr()
-#In[11]中还创造了三次的特征关系，我觉得以后这些东西可能需要用库自动排列组合特征了吧？
-#In[12]中categorical_features和numerical_features感觉做的蛮好的
-#In[14]中skewness计算并对超过0.5的数据进行log
-#进行了四个模型的训练，然后才对特征进行了选择（使用和丢弃）
-#https://www.kaggle.com/humananalog/xgboost-lasso
-#这个kernel使用了from sklearn.metrics import mean_squared_error
-#这里的特征工程做的特别的细，感觉很难理解其中的含义吧
-#特征缩放之前先进行skewed处理特征咯
-#https://www.kaggle.com/serigne/stacked-regressions-top-4-on-leaderboard
-#这里面的Outliers可能以后需要借鉴的吧
-#In[7]之类的画图可能也是我们需要积累的吧
-#boxcox1p也是log以外的一种数据处理方式咯
-#我真的觉得这些狗币看了数据的相关性或者是分布之后并没有做什么卵事情呢
-
-#然后是总结一下titanic的相关的kernel
-#https://www.kaggle.com/startupsci/titanic-data-science-solutions
-#基本上面就是完整的数据科学处理流程，不论是使用神经网络还是采用传统模型都可以借鉴吧
-#剩下的部分都在我的代码里面咯，所以神经网络就是很花计算资源比较吃数据总量，不用做特征工程很方便
-
-#我试了一下这个cat模型的超参搜索，效果好像真的是比xgb强一个层次诶。。我花了很多时间读carboost的参数
-#终于找到catboost的调参指南了 https://www.jqr.com/article/000136
-#https://blog.csdn.net/linxid/article/details/80723811
-#https://blog.csdn.net/AiirrrrYee/article/details/78224232
-#先实现这个catboost模型的超参搜索咯，我预计应该比xgboost结果好10%左右吧
-
-#修改出了这个问题的神经网络的模型版本代码
-
-#实现了lightgbm版本的代码咯
-#经过我的了解，其实Lightgbm还是有好处的，毕竟xgb训练的速度太慢了
-#这个lightgbm的训练速度比起xgb有明显的提升而且准确率等并没有啥损失
-#之后的超参搜索主要根据下面的链接中的内容
-#https://zhuanlan.zhihu.com/p/27916208
-#https://www.cnblogs.com/bjwu/p/9307344.html
-#https://juejin.im/post/5b76437ae51d45666b5d9b05
-
+#这个版本总结了一下别人的kernel，并将之前整理的流程一起用于提交新版本
+#目前主要使用lgb作为训练吧，因为他的训练时间确实是比较快速的，提交的时候采用cat模型咯。
+#尝试神经网络的特征提取，并用这些模型进行输出咯
 import ast
 import math
 import pickle
@@ -94,13 +39,6 @@ import torch.nn.functional as F
 import skorch
 from skorch import NeuralNetRegressor
 from lightgbm.sklearn import LGBMRegressor
-
-#这样的做法主要是为了节约计算时间咯
-X_train_scaled = pd.read_csv("train_scaled_5_15.csv", encoding="ANSI")
-X_test_scaled = pd.read_csv("test_scaled_5_15.csv", encoding="ANSI")
-data_train =  pd.read_csv("train.csv", encoding="ANSI")
-data_test = pd.read_csv("test.csv", encoding="ANSI")
-Y_train = data_train["revenue"]
 
 def save_inter_params(trials, space_nodes, best_nodes, title):
  
@@ -928,306 +866,33 @@ lgb_space_nodes = {"title":["stacked_tmdb_box_office_prediction"],
                    "min_child_weight":[16, 18, 20, 22, 24]
                    }
 
-"""
-#xgb和cat略微PK了一下，感觉后者潜力无限的样子，好像能吊打xgb
-rsg = XGBRegressor(random_state=42)
-rsg.fit(X_train_scaled, Y_train)
-Y_pred = rsg.predict(X_train_scaled)
-print("mse:", np.mean((Y_pred-Y_train)**2))
-print("rmse:", np.sqrt(np.mean((Y_pred-Y_train)**2)))
-Y_pred = rsg.predict(X_test_scaled)
-data = {"id":data_test["id"], "revenue":Y_pred}
-output = pd.DataFrame(data = data)
-output.to_csv("xgb_predicton0.csv", index=False)
+#（1）在填充之前先确认了缺失的程度（缺失百分比）
+#（2）然后使用均值和众数填充缺失值
+#（3）使用skewness，并查看数据的分布或者与待拟合数据关系
+#（4）然后对数据进行相关性检查，并对重要缺失数据采用简单模型进行拟合
+#（5）然后是各种尝试从现有的特征中创造出新的特征加入到模型中咯
+#（6）在输入到学习器之前先进行一次特征选择熬，特征选择和组合不同的模型相差很多（还有使用肉眼选择的），不再统一归纳。
+#（7）我觉得神经网络的部分就是自己增加噪音咯，以获取更多的数据咯
 
-#下面的设置方式可以使用GPU对于数据进行训练咯
-rsg = CatBoostRegressor(random_state=42, task_type='GPU', iterations=20000)
-rsg.fit(X_train_scaled, Y_train)
-Y_pred = rsg.predict(X_train_scaled)
-print("mse:", np.mean((Y_pred-Y_train)**2))
-print("rmse:", np.sqrt(np.mean((Y_pred-Y_train)**2)))
-Y_pred = rsg.predict(X_test_scaled)
-data = {"id":data_test["id"], "revenue":Y_pred}
-output = pd.DataFrame(data = data)
-output.to_csv("cat_predicton0.csv", index=False)
-"""
+#这样的做法主要是为了节约计算时间咯
+X_train_scaled = pd.read_csv("train_scaled_5_15.csv", encoding="ANSI")
+X_test_scaled = pd.read_csv("test_scaled_5_15.csv", encoding="ANSI")
+data_train =  pd.read_csv("train.csv", encoding="ANSI")
+data_test = pd.read_csv("test.csv", encoding="ANSI")
+Y_train = data_train["revenue"]
 
-"""
-#catboost的超参搜索咯
-#因为CatBoostRegressor没有coef_所以无法使用PermutationImportance进行特征选择咯，就使用xgb代劳咯
-#我的天不对，CatBoostRegressor可以使用PermutationImportance进行特征选择，但是巨慢，而且选择结果似乎有问题
-#这样我晚上测试一哈能否直接用cat进行特征的选择，如果不行的话就直接用xgb代劳了吧。
-#下面的代码可以正常运行，就是结果好像并不和预期一致熬
-start_time = datetime.datetime.now()
-rfc_model = CatBoostRegressor(random_state=42, task_type='GPU').fit(X_train_scaled, Y_train)
-perm = PermutationImportance(rfc_model, random_state=42).fit(X_train_scaled, Y_train)
-feature_importances1 = perm.feature_importances_#这是返回每个特征的权重
-feature_importances_std = perm.feature_importances_std_ 
-feature_importances2 = np.where(feature_importances1>0)#此时我记录下了每个特征的列数
-X_train_scaled_new = X_train_scaled[X_train_scaled.columns[feature_importances2]]
-X_test_scaled_new = X_test_scaled[X_test_scaled.columns[feature_importances2]]
-X_train_scaled = X_train_scaled_new
-X_test_scaled = X_test_scaled_new
-
-trials = Trials()
-algo = partial(tpe.suggest, n_startup_jobs=10)
-best = fmin(cat_f, cat_space, algo=tpe.suggest, max_evals=1, trials=trials)
-best_nodes = parse_cat_nodes(trials, cat_space_nodes)
-save_inter_params(trials, cat_space_nodes, best_nodes, "tmdb_box_office_prediction")
-rsg = train_cat_model(best_nodes, X_train_scaled, Y_train)
-
-Y_pred = rsg.predict(X_test_scaled)
-data = {"id":data_test["id"], "revenue":Y_pred}
-output = pd.DataFrame(data = data)            
-output.to_csv("cat_predicton.csv", index=False)
-end_time = datetime.datetime.now()
-print("time cost", (end_time - start_time))
-"""
-
-"""
-#现在正在实验不经过特征选择的时候结果是否更好？
-#这个实验证明了，xgb模型特征选择前后好像差距不大，总体而言略有提升。
-#这个实验证明了，cat特征选择之后的模型效果嗨不如没经过特征选择的模型
-#这个可能是因为模型本身的设计问题，cat会组合特征的，所以不应该这样选择特征吧
-#而且这个实验也算是可以将cat模型和xgb模型进行了一哈比较,cat就是速度慢但是比xgb效果更好。
-#mse: 4494326966815931.0
-#rmse: 67039741.697115235
-#-7031069324633610.0
-#-5970638786253380.0
-#mse: 4494326966815931.0
-#rmse: 67039741.697115235
-#-6876736596297556.0
-#-5688557476764342.0
-X_split_train, X_split_test, Y_split_train, Y_split_test = train_test_split(X_train_scaled, Y_train, test_size=0.3, random_state=42)
-xgb = XGBRegressor(random_state=42)
-xgb.fit(X_split_train, Y_split_train)
-Y_pred = xgb.predict(X_split_test)
-print("mse:", np.mean((Y_pred-Y_split_test)**2))
-print("rmse:", np.sqrt(np.mean((Y_pred-Y_split_test)**2)))
-metric1 = cross_val_score(xgb, X_split_train, Y_split_train, cv=10, scoring="neg_mean_squared_error").mean()
-metric2 = cross_val_score(xgb, X_split_test, Y_split_test, cv=10, scoring="neg_mean_squared_error").mean()
-print(metric1)
-print(metric2)
-
-start_time = datetime.datetime.now()
-rfc_model = XGBRegressor(random_state=42).fit(X_split_train, Y_split_train)
-perm = PermutationImportance(rfc_model, random_state=42).fit(X_split_train, Y_split_train)
-feature_importances1 = perm.feature_importances_#这是返回每个特征的权重
-feature_importances_std = perm.feature_importances_std_ 
-feature_importances2 = np.where(feature_importances1>0)#此时我记录下了每个特征的列数
-X_split_train_new = X_split_train[X_split_train.columns[feature_importances2]]
-X_split_test_new = X_split_test[X_split_test.columns[feature_importances2]]
-X_split_train = X_split_train_new
-X_split_test = X_split_test_new
-xgb = XGBRegressor(random_state=42)
-xgb.fit(X_split_train, Y_split_train)
-Y_pred = xgb.predict(X_split_test)
-print("mse:", np.mean((Y_pred-Y_split_test)**2))
-print("rmse:", np.sqrt(np.mean((Y_pred-Y_split_test)**2)))
-metric1 = cross_val_score(xgb, X_split_train, Y_split_train, cv=10, scoring="neg_mean_squared_error").mean()
-metric2 = cross_val_score(xgb, X_split_test, Y_split_test, cv=10, scoring="neg_mean_squared_error").mean()
-print(metric1)
-print(metric2)
-
-
-mse: 5234728273565622.0
-rmse: 72351422.05627766
--6936366034980786.0
--5721180417973920.0
-mse: 1.5923488227388196e+16
-rmse: 126188304.63790293
--2.012557271674441e+16
--1.6076423120921994e+16
-X_split_train, X_split_test, Y_split_train, Y_split_test = train_test_split(X_train_scaled, Y_train, test_size=0.3, random_state=42)
-cat = CatBoostRegressor(random_state=42, iterations=6000, task_type='GPU')
-cat.fit(X_split_train, Y_split_train)
-Y_pred = cat.predict(X_split_test)
-print("mse:", np.mean((Y_pred-Y_split_test)**2))
-print("rmse:", np.sqrt(np.mean((Y_pred-Y_split_test)**2)))
-metric1 = cross_val_score(cat, X_split_train, Y_split_train, cv=10, scoring="neg_mean_squared_error").mean()
-metric2 = cross_val_score(cat, X_split_test, Y_split_test, cv=10, scoring="neg_mean_squared_error").mean()
-print(metric1)
-print(metric2)
-
-start_time = datetime.datetime.now()
-rfc_model = CatBoostRegressor(random_state=42, iterations=6000, task_type='GPU').fit(X_split_train, Y_split_train)
-perm = PermutationImportance(rfc_model, random_state=42).fit(X_split_train, Y_split_train)
-feature_importances1 = perm.feature_importances_#这是返回每个特征的权重
-feature_importances_std = perm.feature_importances_std_ 
-feature_importances2 = np.where(feature_importances1>0)#此时我记录下了每个特征的列数
-X_split_train_new = X_split_train[X_split_train.columns[feature_importances2]]
-X_split_test_new = X_split_test[X_split_test.columns[feature_importances2]]
-X_split_train = X_split_train_new
-X_split_test = X_split_test_new
-cat = CatBoostRegressor(random_state=42, iterations=6000, task_type='GPU')
-cat.fit(X_split_train, Y_split_train)
-Y_pred = cat.predict(X_split_test)
-print("mse:", np.mean((Y_pred-Y_split_test)**2))
-print("rmse:", np.sqrt(np.mean((Y_pred-Y_split_test)**2)))
-metric1 = cross_val_score(cat, X_split_train, Y_split_train, cv=10, scoring="neg_mean_squared_error").mean()
-metric2 = cross_val_score(cat, X_split_test, Y_split_test, cv=10, scoring="neg_mean_squared_error").mean()
-print(metric1)
-print(metric2)
-"""
-
-"""
-#这个实验说明iterations取1000真的比取3000和6000的好咯
-5037457517447120.0
-70975048.55544038
--7038764562393806.0
--5606052626595302.0
-
-5215102693194729.0
-72215667.92043628
--7172024191322267.0
--5818345579568044.0
-
-5295539335032408.0
-72770456.47123843
--7212143272887496.0
--5892317033428227.0
-result = []
-X_split_train, X_split_test, Y_split_train, Y_split_test = train_test_split(X_train_scaled, Y_train, test_size=0.3, random_state=42)
-cat = CatBoostRegressor(random_state=42, iterations=1000, task_type='GPU')
-cat.fit(X_split_train, Y_split_train)
-Y_pred = cat.predict(X_split_test)
-mse = np.mean((Y_pred-Y_split_test)**2)
-rmse = np.sqrt(np.mean((Y_pred-Y_split_test)**2))
-print("mse:", mse)
-print("rmse:", rmse)
-metric1 = cross_val_score(cat, X_split_train, Y_split_train, cv=10, scoring="neg_mean_squared_error").mean()
-metric2 = cross_val_score(cat, X_split_test, Y_split_test, cv=10, scoring="neg_mean_squared_error").mean()
-print(metric1)
-print(metric2)
-result.append(mse)
-result.append(rmse)
-result.append(metric1)
-result.append(metric2)
-
-cat = CatBoostRegressor(random_state=42, iterations=3000, task_type='GPU')
-cat.fit(X_split_train, Y_split_train)
-Y_pred = cat.predict(X_split_test)
-mse = np.mean((Y_pred-Y_split_test)**2)
-rmse = np.sqrt(np.mean((Y_pred-Y_split_test)**2))
-print("mse:", mse)
-print("rmse:", rmse)
-metric1 = cross_val_score(cat, X_split_train, Y_split_train, cv=10, scoring="neg_mean_squared_error").mean()
-metric2 = cross_val_score(cat, X_split_test, Y_split_test, cv=10, scoring="neg_mean_squared_error").mean()
-print(metric1)
-print(metric2)
-result.append(mse)
-result.append(rmse)
-result.append(metric1)
-result.append(metric2)
-
-cat = CatBoostRegressor(random_state=42, iterations=6000, task_type='GPU')
-cat.fit(X_split_train, Y_split_train)
-Y_pred = cat.predict(X_split_test)
-mse = np.mean((Y_pred-Y_split_test)**2)
-rmse = np.sqrt(np.mean((Y_pred-Y_split_test)**2))
-print("mse:", mse)
-print("rmse:", rmse)
-metric1 = cross_val_score(cat, X_split_train, Y_split_train, cv=10, scoring="neg_mean_squared_error").mean()
-metric2 = cross_val_score(cat, X_split_test, Y_split_test, cv=10, scoring="neg_mean_squared_error").mean()
-print(metric1)
-print(metric2)
-result.append(mse)
-result.append(rmse)
-result.append(metric1)
-result.append(metric2)
-
-for i in range(0, len(result)):
-    print(result[i])
-"""
-
-"""
-#下面的代码可以运行了，但是效果真的很差劲熬
-#下面的前两行是cat未优化模型的结果
-#后两行是执行三次超参搜索的神经网络模型的结果
-#mse: 5234728273565622.0
-#rmse: 72351422.05627766
-#mse: revenue    1.948313e+16
-#rmse: revenue    139581984.0
-Y_train_temp = Y_train.values.reshape(-1,1)
-Y_train_temp = np.log1p(Y_train_temp)
-Y_train = pd.DataFrame(data=Y_train_temp.astype(np.float32), columns=["revenue"])
-start_time = datetime.datetime.now()
-trials = Trials()
-algo = partial(tpe.suggest, n_startup_jobs=10)
-best_params = fmin(nn_f, nn_space, algo=algo, max_evals=1, trials=trials)
-best_nodes = parse_nn_nodes(trials, nn_space_nodes)
-save_inter_params(trials, nn_space_nodes, best_nodes, "tmdb_box_office_prediction")
-nn_predict(best_nodes, X_train_scaled, Y_train, X_test_scaled, 5)
-end_time = datetime.datetime.now()
-print("time cost", (end_time - start_time))
-"""
-
-"""
-#下面的lgb的超参搜索终于也可以使用咯
-start_time = datetime.datetime.now()
-rfc_model = LGBMRegressor(random_state=42).fit(X_train_scaled, Y_train)
-perm = PermutationImportance(rfc_model, random_state=42).fit(X_train_scaled, Y_train)
-feature_importances1 = perm.feature_importances_#这是返回每个特征的权重
-feature_importances_std = perm.feature_importances_std_ 
-feature_importances2 = np.where(feature_importances1>0)#此时我记录下了每个特征的列数
-X_train_scaled_new = X_train_scaled[X_train_scaled.columns[feature_importances2]]
-X_test_scaled_new = X_test_scaled[X_test_scaled.columns[feature_importances2]]
-X_train_scaled = X_train_scaled_new
-X_test_scaled = X_test_scaled_new
-
-trials = Trials()
-algo = partial(tpe.suggest, n_startup_jobs=10)
-best = fmin(lgb_f, lgb_space, algo=tpe.suggest, max_evals=1, trials=trials)
-best_nodes = parse_lgb_nodes(trials, lgb_space_nodes)
-save_inter_params(trials, lgb_space_nodes, best_nodes, "tmdb_box_office_prediction")
-rsg = train_lgb_model(best_nodes, X_train_scaled, Y_train)
-
-Y_pred = rsg.predict(X_test_scaled)
-data = {"id":data_test["id"], "revenue":Y_pred}
-output = pd.DataFrame(data = data)
-output.to_csv("lgb_predicton.csv", index=False)
-end_time = datetime.datetime.now()
-print("time cost", (end_time - start_time))
-"""
-
-"""
-#这个实验证明了，lgb模型特征选择前后好像差距不大，总体而言略有提升。
-mse: 4507820707869479.0
-rmse: 67140306.1347614
--6728892001288328.0
--5786222217401582.0
-mse: 4507820707869479.0
-rmse: 67140306.1347614
--6726981237052374.0
--5744437712744022.0
-start_time = datetime.datetime.now()
-X_split_train, X_split_test, Y_split_train, Y_split_test = train_test_split(X_train_scaled, Y_train, test_size=0.3, random_state=42)
-lgb = LGBMRegressor(random_state=42)
-lgb.fit(X_split_train, Y_split_train)
-Y_pred = lgb.predict(X_split_test)
-print("mse:", np.mean((Y_pred-Y_split_test)**2))
-print("rmse:", np.sqrt(np.mean((Y_pred-Y_split_test)**2)))
-metric1 = cross_val_score(lgb, X_split_train, Y_split_train, cv=10, scoring="neg_mean_squared_error").mean()
-metric2 = cross_val_score(lgb, X_split_test, Y_split_test, cv=10, scoring="neg_mean_squared_error").mean()
-print(metric1)
-print(metric2)
-
-rfc_model = LGBMRegressor(random_state=42).fit(X_split_train, Y_split_train)
-perm = PermutationImportance(rfc_model, random_state=42).fit(X_split_train, Y_split_train)
-feature_importances1 = perm.feature_importances_#这是返回每个特征的权重
-feature_importances_std = perm.feature_importances_std_ 
-feature_importances2 = np.where(feature_importances1>0)#此时我记录下了每个特征的列数
-X_split_train_new = X_split_train[X_split_train.columns[feature_importances2]]
-X_split_test_new = X_split_test[X_split_test.columns[feature_importances2]]
-X_split_train = X_split_train_new
-X_split_test = X_split_test_new
-lgb = LGBMRegressor(random_state=42)
-lgb.fit(X_split_train, Y_split_train)
-Y_pred = lgb.predict(X_split_test)
-print("mse:", np.mean((Y_pred-Y_split_test)**2))
-print("rmse:", np.sqrt(np.mean((Y_pred-Y_split_test)**2)))
-metric1 = cross_val_score(lgb, X_split_train, Y_split_train, cv=10, scoring="neg_mean_squared_error").mean()
-metric2 = cross_val_score(lgb, X_split_test, Y_split_test, cv=10, scoring="neg_mean_squared_error").mean()
-print(metric1)
-print(metric2)
-"""
+#找了几个做的比我更好的人的攻略咯
+#https://www.kaggle.com/artgor/eda-feature-engineering-and-model-interpretation
+#这里面的In[27]提到的使用top的值而不是直接丢弃应该能够得到更多的信息量（数量、top）
+#In[67]还创建了更多的特征？？周三发布的影片居然能够获得更多的报酬？？种类更多收入也容易更高
+#我觉得最有效的办法就是自己在网站上直接下载更多倍的数据咯，应该是最无解的做法
+#之前好像有个库可以自己无脑创建很多新的特征的吧，能够创建出很多我们平时觉得很匪夷所思的但是有用的特征。
+#https://www.kaggle.com/ashishpatel26/now-you-see-me  这个狗币感觉没说任何有用的东西
+#https://www.kaggle.com/zero92/tmdb-prediction 这个狗币有点意思的地方在于。。直接使用了别人的数据。
+#https://www.kaggle.com/kamalchhirang/eda-feature-engineering-lgb-xgb-cat 
+#这狗币import json可以很方便处理json数据咯。
+#In[12]的部分我觉得可以用来分析我之后的数据的分布情况。
+#对年月日进行一下处理咯
+#原来那个神奇的特征是从这里来的呀https://www.kaggle.com/kamalchhirang/eda-feature-engineering-lgb-xgb-cat
+#原来那个自动创造特征的东西好像叫做auto feature engineering 
+#我现在感觉工作量很大的样子呀。。。。。
