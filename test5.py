@@ -10,9 +10,10 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LogisticRegression, Lasso
+from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.ensemble import RandomForestClassifier, IsolationForest
 from sklearn.cross_validation import cross_val_score, StratifiedKFold
+from sklearn.linear_model import LogisticRegression, Lasso, LinearRegression
 from sklearn.feature_selection import SelectFromModel, RFE, VarianceThreshold
 
 import hyperopt
@@ -874,15 +875,9 @@ lgb_space_nodes = {"title":["stacked_tmdb_box_office_prediction"],
 #（6）在输入到学习器之前先进行一次特征选择熬，特征选择和组合不同的模型相差很多（还有使用肉眼选择的），不再统一归纳。
 #（7）我觉得神经网络的部分就是自己增加噪音咯，以获取更多的数据咯
 
-#这样的做法主要是为了节约计算时间咯
-X_train_scaled = pd.read_csv("train_scaled_5_15.csv", encoding="ANSI")
-X_test_scaled = pd.read_csv("test_scaled_5_15.csv", encoding="ANSI")
-data_train =  pd.read_csv("train.csv", encoding="ANSI")
-data_test = pd.read_csv("test.csv", encoding="ANSI")
-Y_train = data_train["revenue"]
-
 #找了几个做的比我更好的人的攻略咯
 #https://www.kaggle.com/artgor/eda-feature-engineering-and-model-interpretation
+#这里的In[13]的代码的写法好像有点意思熬，原来还可以这样子写程序么
 #这里面的In[27]提到的使用top的值而不是直接丢弃应该能够得到更多的信息量（数量、top）
 #In[67]还创建了更多的特征？？周三发布的影片居然能够获得更多的报酬？？种类更多收入也容易更高
 #我觉得最有效的办法就是自己在网站上直接下载更多倍的数据咯，应该是最无解的做法
@@ -896,3 +891,396 @@ Y_train = data_train["revenue"]
 #原来那个神奇的特征是从这里来的呀https://www.kaggle.com/kamalchhirang/eda-feature-engineering-lgb-xgb-cat
 #原来那个自动创造特征的东西好像叫做auto feature engineering 
 #我现在感觉工作量很大的样子呀。。。。。
+
+#读取数据并合并咯
+data_train = pd.read_csv("train.csv", encoding="ANSI")
+data_test = pd.read_csv("test.csv", encoding="ANSI")
+temp = data_train["revenue"]
+data_all = pd.concat([data_train, data_test], axis=0)
+data_all = data_all.drop(["id","revenue"], axis=1)
+#X_all = data_all.drop(["id","revenue"], axis=1)
+
+#先看一哈总体缺失的内容到底有什么
+#个人觉得belongs_to_collection、homepage简单使用。tagline搞不好都可以
+#Keywords                  669
+#belongs_to_collection    5917
+#budget                      0
+#cast                       26
+#crew                       38
+#genres                     23
+#homepage                 5032
+#imdb_id                     0
+#original_language           0
+#original_title              0
+#overview                   22
+#popularity                  0
+#poster_path                 2
+#production_companies      414
+#production_countries      157
+#release_date                1
+#runtime                     6
+#spoken_languages           62
+#status                      2
+#tagline                  1460
+#title                       3
+#print(data_all.isnull().sum())
+
+#直接将belongs_to_collection的数据删除了吗，主要感觉不知道怎么用
+#这样吧，直接将其替换为有无，这样从信息的角度上看，应该信息更丰富一些
+#data_all.drop(["belongs_to_collection"], axis=1)
+data_all.loc[(data_all.belongs_to_collection.notnull()), 'belongs_to_collection'] = "not null"
+data_all.loc[(data_all.belongs_to_collection.isnull()), 'belongs_to_collection'] = "null"
+
+#处理budget属性就直接用很简单的平均数代替了吧,并不需要用其他值预估咯
+#data_all["budget"].fillna(data_all["budget"].mode()[0], inplace=True) 
+#均值 np.mean(nums) #中位数 np.median(nums) #众数 np.mode()[0]
+data_all["budget"].fillna(data_all["budget"].dropna().mean(), inplace=True)
+#因为这个budget并不符合正态分布，所以需要使用np.log进行转换咯
+#sns.distplot(data_all["budget"], rug=True)
+#plt.show()
+#偏度本身有个临界值，有些代码是觉得大于1或者0.6就要进行np.log计算咯
+#我好想一直不知道np.log np.log1p np.log10怎么选择，看了下面的数据我心里有底咯
+#print(data_all["budget"].skew())
+#print(np.log(data_all["budget"]).skew())
+#print(np.log1p(data_all["budget"]).skew())
+#print(np.log2(data_all["budget"]).skew())
+#print(np.log10(data_all["budget"]).skew())
+#print(temp.skew())
+#print(np.log(temp).skew())
+#print(np.log1p(temp).skew())
+#print(np.log2(temp).skew())
+#print(np.log10(temp).skew())
+data_all["budget"] = np.log1p(data_all["budget"])
+
+#genres的特征应该如何处理，感觉好像很麻烦的样子
+#由于genres存在为空的情况，所以先将空的填充为[]
+#下面整理好了所有的genres下面的类比
+#data_all["genres"].fillna("[]", inplace=True)
+#看了别人的攻略之后，我发现这里应该添加一个电影种类总数genres_num
+data_all["genres"].fillna(data_all["genres"].dropna().mode()[0], inplace=True) 
+genres_list = []
+for i in range(0, len(data_all)):
+    #这边如果不使用iloc那么结果就是错误的，取得的对象是str类型的
+    #print(data_all.iloc[i]["genres"])
+    #print(i)
+    dict_list = ast.literal_eval(data_all.iloc[i]["genres"])
+    for j in range(0, len(dict_list)):
+        name = dict_list[j]["name"]
+        name = str("genres="+name)
+        if name not in genres_list:
+            genres_list.append(name)
+            #print(genres_list)
+#根据类别重新构造feature咯
+data = np.zeros((len(data_all), len(genres_list)))
+genres_df = pd.DataFrame(data, columns=genres_list, index=data_all.index.values)
+data = np.zeros((len(data_all), 1))
+num_df = pd.DataFrame(data, columns=["genres_num"], index=data_all.index.values)
+for i in range(0, len(data_all)):
+    dict_list = ast.literal_eval(data_all.iloc[i]["genres"])
+    num_df.iloc[i] = len(dict_list)
+    for j in range(0, len(dict_list)):
+        name = dict_list[j]["name"]
+        name = str("genres="+name)
+        genres_df.iloc[i][name] = 1
+#丢弃data_all中的genres特征，然后合并新的genres_df
+data_all = data_all.drop(["genres"], axis=1)
+data_all = pd.concat([data_all, genres_df, num_df], axis=1)
+
+#现在考虑处理homepage这个特征咯
+data_all.loc[(data_all.homepage.notnull()), 'homepage'] = "not null"
+data_all.loc[(data_all.homepage.isnull()), 'homepage'] = "null"
+#考虑处理imdb_id这个特征咯
+data_all.loc[(data_all.imdb_id.notnull()), 'imdb_id'] = "not null"
+data_all.loc[(data_all.imdb_id.isnull()), 'imdb_id'] = "null"
+#考虑处理original_language这个特征咯
+data_all["original_language"].fillna(data_all["original_language"].dropna().mode()[0], inplace=True)
+#考虑处理original_title这个特征咯,暂时不知道咋用直接粗暴使用
+data_all.loc[(data_all.original_title.notnull()), 'original_title'] = "not null"
+data_all.loc[(data_all.original_title.isnull()), 'original_title'] = "null"
+
+"""
+#考虑处理overview这个特征咯,暂时不知道咋用直接粗暴使用
+data_all.loc[(data_all.overview.notnull()), 'overview'] = "not null"
+data_all.loc[(data_all.overview.isnull()), 'overview'] = "null"
+"""
+#看了一下别人的kernel我似乎发现了一个更好的用法咯
+vectorizer = TfidfVectorizer(
+             sublinear_tf=True,
+             analyzer='word',
+             token_pattern=r'\w{1,}',
+             ngram_range=(1, 2),
+             min_df=5)
+overview_text = vectorizer.fit_transform(data_train['overview'].fillna(''))
+#eli5.show_weights(linreg, vec=vectorizer, top=20, feature_filter=lambda x: x != '<BIAS>')
+overview_text_df = pd.DataFrame(data=overview_text.toarray(), index=data_all.index.values)
+rfc_model = LinearRegression().fit(overview_text_df, np.log1p(temp))
+perm = PermutationImportance(rfc_model, random_state=42).fit(overview_text_df, np.log1p(temp))
+feature_importances1 = perm.feature_importances_#这是返回每个特征的权重
+feature_importances_std = perm.feature_importances_std_ 
+feature_importances2 = np.where(feature_importances1>0)#此时我记录下了每个特征的列数
+#下面才是真正的把所有的特征都选出来了
+overview_text_df_new = overview_text_df[overview_text_df.columns[feature_importances2]]
+
+
+#考虑处理popularity这个特征咯,暂时不知道咋用直接粗暴使用
+data_all["popularity"].fillna(data_all["popularity"].dropna().mean(), inplace=True)
+#考虑处理poster_path这个特征咯,暂时不知道咋用直接粗暴使用
+data_all.loc[(data_all.poster_path.notnull()), 'poster_path'] = "not null"
+data_all.loc[(data_all.poster_path.isnull()), 'poster_path'] = "null"
+
+"""
+#考虑处理production_companies这个特征咯,暂时不知道咋用直接粗暴使用
+#data_all["production_companies"].fillna("[{'name': 'null', 'id': 4}]", inplace=True)
+data_all["production_companies"].fillna(data_all["production_companies"].mode()[0], inplace=True) 
+companies_list = []
+for i in range(0, len(data_all)):
+    dict_list = ast.literal_eval(data_all.iloc[i]["production_companies"])
+    for j in range(0, len(dict_list)):
+        name = dict_list[j]["name"]
+        name = str("production_companies="+name)
+        if name not in companies_list:
+            companies_list.append(name)
+#根据类别重新构造feature咯
+data = np.zeros((len(data_all), len(companies_list)))
+companies_df = pd.DataFrame(data, columns=companies_list, index=data_all.index.values)
+for i in range(0, len(data_all)):
+    dict_list = ast.literal_eval(data_all.iloc[i]["production_companies"])
+    for j in range(0, len(dict_list)):
+        name = dict_list[j]["name"]
+        name = str("production_companies="+name)
+        companies_df.iloc[i][name] = 1
+#丢弃data_all中的genres特征，然后合并新的genres_df
+data_all = data_all.drop(["production_companies"], axis=1)
+data_all = pd.concat([data_all, companies_df], axis=1)
+"""
+
+data_all = data_all.drop(["production_companies"], axis=1)
+
+#考虑处理production_countries这个特征咯
+#data_all["production_countries"].fillna("[{'iso_3166_1': 'null', 'name': 'null'}]", inplace=True)
+data_all["production_countries"].fillna(data_all["production_countries"].dropna().mode()[0], inplace=True) 
+countries_list = []
+for i in range(0, len(data_all)):
+    dict_list = ast.literal_eval(data_all.iloc[i]["production_countries"])
+    for j in range(0, len(dict_list)):
+        name = dict_list[j]["iso_3166_1"]
+        name = str("production_countries="+name)
+        if name not in countries_list:
+            countries_list.append(name)
+#根据类别重新构造feature咯
+data = np.zeros((len(data_all), len(countries_list)))
+countries_df = pd.DataFrame(data, columns=countries_list, index=data_all.index.values)
+for i in range(0, len(data_all)):
+    dict_list = ast.literal_eval(data_all.iloc[i]["production_countries"])
+    for j in range(0, len(dict_list)):
+        name = dict_list[j]["iso_3166_1"]
+        name = str("production_countries="+name)
+        countries_df.iloc[i][name] = 1
+#丢弃data_all中的genres特征，然后合并新的genres_df
+data_all = data_all.drop(["production_countries"], axis=1)
+data_all = pd.concat([data_all, countries_df], axis=1)
+
+"""
+#考虑处理release_date这个特征咯,我觉得这个特征可以拆分为年和月
+data_all["release_date"].fillna(data_all["release_date"].mode()[0], inplace=True) 
+years_list = []
+months_list = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12']
+for i in range(0, len(data_all)):
+    temp = data_all.iloc[i]["release_date"].split('/')
+    #如果是使用年月日的方式表示日期
+    if(int(temp[0])>1000): 
+        if(temp[0] not in years_list):
+            years_list.append(temp[0])
+    #如果是使用月日年的方式表示日期
+    else:
+        if(temp[2] not in years_list):
+            if(int(temp[2])<20):
+                #如果年份小于20例如15，那么应该是2015年的电影
+                year = str("20"+temp[2])
+                if(year not in years_list):
+                    years_list.append(year)
+            else:
+                #如果年份大于20例如87，那么应该是1987年的电影
+                #但是最早的电影是1895年的，所以如果96可能是1896也可能是1996，但是都只考虑1996吧。。
+                year = str("19"+temp[2])
+                if(year not in years_list):
+                    years_list.append(year)
+data = np.zeros((len(data_all), len(years_list)))
+years_df = pd.DataFrame(data, columns=years_list, index=data_all.index.values)
+data = np.zeros((len(data_all), len(months_list)))
+months_df = pd.DataFrame(data, columns=months_list, index=data_all.index.values)
+for i in range(0, len(data_all)):
+    temp = data_all.iloc[i]["release_date"].split('/')
+    #如果是使用年月日的方式表示日期
+    if(int(temp[0])>1000): 
+        years_df.iloc[i][temp[0]] = 1
+        months_df.iloc[i][temp[1]] = 1
+    #如果是使用月日年的方式表示日期
+    else:    
+        if(int(temp[2])<20):
+            years_df.iloc[i][str("20" +temp[2])] = 1
+            months_df.iloc[i][temp[0]] = 1
+        else:
+            years_df.iloc[i][str("19"+temp[2])] = 1
+            months_df.iloc[i][temp[0]] = 1
+data_all = data_all.drop(["release_date"], axis=1)
+data_all = pd.concat([data_all, years_df, months_df], axis=1)
+"""
+
+#我的天，惊呆我了，excel里面release_date有两种表示方式，但是可以通过excel进行统一设计。
+#还好我及时发现了这个问题，但是感觉上面的代码都白写了呀，还是准备重写吧。
+#其实我倒是觉得，不一样的日期方式可能暴露了额外的信息哦。
+data_all["release_date"].fillna(data_all["release_date"].dropna().mode()[0], inplace=True) 
+years_list = []
+months_list = ['release_month=1', 'release_month=2', 'release_month=3', 'release_month=4', 
+               'release_month=5', 'release_month=6', 'release_month=7', 'release_month=8', 
+               'release_month=9', 'release_month=10', 'release_month=11', 'release_month=12']
+for i in range(0, len(data_all)):
+    temp = data_all.iloc[i]["release_date"].split('/')
+    if(str("release_year="+temp[2]) not in years_list):
+        years_list.append(str("release_year="+temp[2]))
+data = np.zeros((len(data_all), len(years_list)))
+years_df = pd.DataFrame(data, columns=years_list, index=data_all.index.values)
+data = np.zeros((len(data_all), len(months_list)))
+months_df = pd.DataFrame(data, columns=months_list, index=data_all.index.values)        
+for i in range(0, len(data_all)):
+    temp = data_all.iloc[i]["release_date"].split('/')
+    years_df.iloc[i][str("release_year="+temp[2])] = 1
+    months_df.iloc[i][str("release_month="+temp[0])] = 1
+data_all = data_all.drop(["release_date"], axis=1)
+data_all = pd.concat([data_all, years_df, months_df], axis=1)
+
+data_all["runtime"].fillna(data_all["runtime"].dropna().mean(), inplace=True)
+
+#准备处理spoken_languages这个特征咯
+#spoken_languages无法被赋值，我真的是想要哭了，为什么这样对我？？
+#我的天那，
+data_all["spoken_languages"].fillna(data_all["spoken_languages"].dropna().mode()[0], inplace=True)
+data_all["spoken_languages"].iloc[150] = "[{'iso_639_1': 'en', 'name': 'English'}]"
+languages_list = []
+for i in range(0, len(data_all)):
+    #print(i)
+    dict_list = ast.literal_eval(data_all.iloc[i]["spoken_languages"])
+    for j in range(0, len(dict_list)):
+        name = dict_list[j]["iso_639_1"]
+        name = str("spoken_languages="+name)
+        if name not in languages_list:
+            languages_list.append(name)
+#根据类别重新构造feature咯
+data = np.zeros((len(data_all), len(languages_list)))
+languages_df = pd.DataFrame(data, columns=languages_list, index=data_all.index.values)
+for i in range(0, len(data_all)):
+    dict_list = ast.literal_eval(data_all.iloc[i]["spoken_languages"])
+    for j in range(0, len(dict_list)):
+        name = dict_list[j]["iso_639_1"]
+        name = str("spoken_languages="+name)
+        languages_df.iloc[i][name] = 1
+data_all = data_all.drop(["spoken_languages"], axis=1)
+data_all = pd.concat([data_all, languages_df], axis=1)
+
+#考虑处理status这个特征咯,暂时不知道咋用直接粗暴使用
+data_all.loc[(data_all.status.isnull()), 'status'] = "null"
+
+#考虑处理tagline这个特征咯,暂时不知道咋用直接粗暴使用
+data_all.loc[(data_all.tagline.isnull()), 'tagline'] = "null"
+data_all.loc[(data_all.tagline.notnull()), 'tagline'] = "not null"
+
+#考虑处理title这个特征咯,暂时不知道咋用直接粗暴使用
+data_all.loc[(data_all.title.isnull()), 'title'] = "null"
+data_all.loc[(data_all.title.notnull()), 'title'] = "not null"
+
+"""
+#这个也是有一万多个关键词暂时还是不用吧
+#考虑处理Keywords这个特征咯,暂时不知道咋用直接粗暴使用
+data_all["Keywords"].fillna(data_all["Keywords"].dropna().mode()[0], inplace=True) 
+Keywords_list = []
+for i in range(0, len(data_all)):
+    print(i)
+    dict_list = ast.literal_eval(data_all.iloc[i]["Keywords"])
+    for j in range(0, len(dict_list)):
+        name = dict_list[j]["name"]
+        name = str("Keywords="+name)
+        if name not in Keywords_list:
+            Keywords_list.append(name)
+#根据类别重新构造feature咯
+data = np.zeros((len(data_all), len(Keywords_list)))
+Keywords_df = pd.DataFrame(data, columns=Keywords_list, index=data_all.index.values)
+for i in range(0, len(data_all)):
+    dict_list = ast.literal_eval(data_all.iloc[i]["Keywords"])
+    for j in range(0, len(dict_list)):
+        name = dict_list[j]["name"]
+        name = str("Keywords="+name)
+        Keywords_df.iloc[i][name] = 1
+data_all = data_all.drop(["Keywords"], axis=1)
+data_all = pd.concat([data_all, Keywords_df], axis=1)
+"""
+
+"""
+#考虑处理cast这个特征咯,暂时不知道咋用直接粗暴使用
+data_all["cast"].fillna(data_all["cast"].mode()[0], inplace=True) 
+cast_list = []
+for i in range(0, len(data_all)):
+    dict_list = ast.literal_eval(data_all.iloc[i]["cast"])
+    for j in range(0, len(dict_list)):
+        name = dict_list[j]["name"]
+        name = str("cast="+name)
+        if name not in cast_list:
+            cast_list.append(name)
+#根据类别重新构造feature咯
+data = np.zeros((len(data_all), len(cast_list)))
+cast_df = pd.DataFrame(data, columns=cast_list, index=data_all.index.values)
+for i in range(0, len(data_all)):
+    dict_list = ast.literal_eval(data_all.iloc[i]["cast"])
+    for j in range(0, len(dict_list)):
+        name = dict_list[j]["name"]
+        name = str("cast="+name)
+        cast_df.iloc[i][name] = 1
+data_all = data_all.drop(["cast"], axis=1)
+data_all = pd.concat([data_all, cast_df], axis=1)
+
+#考虑处理crew这个特征咯,暂时不知道咋用直接粗暴使用
+data_all["crew"].fillna(data_all["crew"].mode()[0], inplace=True) 
+crew_list = []
+for i in range(0, len(data_all)):
+    dict_list = ast.literal_eval(data_all.iloc[i]["crew"])
+    for j in range(0, len(dict_list)):
+        name = dict_list[j]["name"]
+        name = str("crew="+name)
+        if name not in crew_list:
+            crew_list.append(name)
+#根据类别重新构造feature咯
+data = np.zeros((len(data_all), len(crew_list)))
+crew_df = pd.DataFrame(data, columns=crew_list, index=data_all.index.values)
+for i in range(0, len(data_all)):
+    dict_list = ast.literal_eval(data_all.iloc[i]["crew"])
+    for j in range(0, len(dict_list)):
+        name = dict_list[j]["name"]
+        name = str("crew="+name)
+        crew_df.iloc[i][name] = 1
+data_all = data_all.drop(["crew"], axis=1)
+data_all = pd.concat([data_all, crew_df], axis=1)
+"""
+data_all = data_all.drop(["Keywords"], axis=1)
+data_all = data_all.drop(["cast"], axis=1)
+data_all = data_all.drop(["crew"], axis=1)
+
+#检查一下经过特征处理以后是否还存在空值
+#居然runtime存在空值，所以dataframe的fillna真他吗失效了。。
+#1335 2302 243 1489 1632 3817行的数据居然存在空值，我觉得很不可思议
+#data_all.isnull().sum(axis=0)可以显示每列为空的数量
+print(data_all[data_all.isnull().values==True])
+
+#将数据形成one-hot编码
+dict_vector = DictVectorizer(sparse=False)
+X_all = data_all
+X_all = dict_vector.fit_transform(X_all.to_dict(orient='record'))
+X_all = pd.DataFrame(data=X_all, columns=dict_vector.feature_names_)
+#将数据形成类似one-hot编码
+X_all_scaled = pd.DataFrame(MinMaxScaler().fit_transform(X_all), columns = X_all.columns)
+X_all_scaled = pd.DataFrame(data = X_all_scaled, index = X_all.index, columns = X_all_scaled.columns.values)
+X_train_scaled = X_all_scaled[:len(data_train)]
+X_test_scaled = X_all_scaled[len(data_train):]
+Y_train = np.log1p(data_train["revenue"])
+#将数据进行存储吧，不然每次经过上述的特征提取实在太花费时间了
+X_train_scaled.to_csv("train_scaled.csv", index=False)
+X_test_scaled.to_csv("test_scaled.csv", index=False)

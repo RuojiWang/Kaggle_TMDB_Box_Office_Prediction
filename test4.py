@@ -57,6 +57,11 @@
 #https://www.cnblogs.com/bjwu/p/9307344.html
 #https://juejin.im/post/5b76437ae51d45666b5d9b05
 
+#对比了一下xgb cat lgb进行特征选择之后的模型效果如何
+
+#cat iterations的选择在测试集上面的效果如何
+
+#cat模型和xgb模型进行的一次小规模的battle咯
 import ast
 import math
 import pickle
