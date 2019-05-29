@@ -1,7 +1,5 @@
 #coding=utf-8
-#这个版本总结了一下别人的kernel，并将之前整理的流程一起用于提交新版本
-#我在网上找到了更多的数据和新添加的特征，感觉很麻烦暂时不打算使用了
-#目前主要使用lgb作为训练吧，因为他的训练时间确实是比较快速的，提交的时候采用cat模型咯。
+#上个版本的特征工程稍有瑕疵，我觉得可以花两个小时的时间弥补一下
 import ast
 import math
 import pickle
@@ -963,6 +961,9 @@ data_all["budget"].fillna(data_all["budget"].dropna().mean(), inplace=True)
 #print(pd.DataFrame(MinMaxScaler().fit_transform(pd.DataFrame(data = data_all["budget"]))).skew())
 data_all["budget"] = np.log1p(data_all["budget"])
 
+
+
+"""
 #genres的特征应该如何处理，感觉好像很麻烦的样子
 #由于genres存在为空的情况，所以先将空的填充为[]
 #下面整理好了所有的genres下面的类比
@@ -1001,6 +1002,9 @@ data_all = data_all.drop(["genres"], axis=1)
 #print(np.log1p(num_df).skew())
 num_df = np.log1p(num_df)
 data_all = pd.concat([data_all, genres_df, num_df], axis=1)
+"""
+
+
 
 #现在考虑处理homepage这个特征咯
 data_all.loc[(data_all.homepage.notnull()), 'homepage'] = "not null"
@@ -1027,20 +1031,25 @@ data_all.loc[(data_all.poster_path.notnull()), 'poster_path'] = "not null"
 data_all.loc[(data_all.poster_path.isnull()), 'poster_path'] = "null"
 
 
+
+
+"""
 #考虑处理production_countries这个特征咯
 #data_all["production_countries"].fillna("[{'iso_3166_1': 'null', 'name': 'null'}]", inplace=True)
 data_all["production_countries"].fillna(data_all["production_countries"].dropna().mode()[0], inplace=True) 
 countries_list = []
+top_countries = []
 for i in range(0, len(data_all)):
     dict_list = ast.literal_eval(data_all.iloc[i]["production_countries"])
     for j in range(0, len(dict_list)):
         name = dict_list[j]["iso_3166_1"]
-        name = str("production_countries="+name)
-        if name not in countries_list:
-            countries_list.append(name)
+        countries_list.append(name)
+countries_count = Counter(countries_list)
+for i in countries_count.most_common(25):
+    top_countries.append(str('production_countries=')+i[0])
 #根据类别重新构造feature咯
-data = np.zeros((len(data_all), len(countries_list)))
-countries_df = pd.DataFrame(data, columns=countries_list, index=data_all.index.values)
+data = np.zeros((len(data_all), len(top_countries)))
+countries_df = pd.DataFrame(data, columns=top_countries, index=data_all.index.values)
 data = np.zeros((len(data_all), 1))
 num_df = pd.DataFrame(data, columns=["countries_num"], index=data_all.index.values)
 for i in range(0, len(data_all)):
@@ -1056,7 +1065,13 @@ for i in range(0, len(data_all)):
 num_df = np.log(num_df)
 data_all = data_all.drop(["production_countries"], axis=1)
 data_all = pd.concat([data_all, countries_df, num_df], axis=1)
+"""
 
+
+
+
+
+"""
 data_all["release_date"].fillna(data_all["release_date"].dropna().mode()[0], inplace=True) 
 #这个kernel里面的修复函数的代码真的有点意思熬
 def fix_date(x):
@@ -1100,6 +1115,10 @@ data_all = data_all.drop(["release_date"], axis=1)
 #print(data_all['release_date_quarter'].skew()) #
 #print(np.log(data_all['release_date_quarter']).skew())
 #print(np.log1p(data_all['release_date_quarter']).skew())
+"""
+
+
+
 
 data_all["runtime"].fillna(data_all["runtime"].dropna().mean(), inplace=True)
 #这个属性已经比较正态分布了，感觉可以直接使用
@@ -1107,26 +1126,30 @@ data_all["runtime"].fillna(data_all["runtime"].dropna().mean(), inplace=True)
 #print(np.log(data_all['runtime']).skew())
 #print(np.log1p(data_all['runtime']).skew())
 
+
+
+"""
 #准备处理spoken_languages这个特征咯
 #spoken_languages的na无法被赋值，我真的是想要哭了，为什么这样对我？？后来重新开关机就行了
 data_all["spoken_languages"].fillna(data_all["spoken_languages"].dropna().mode()[0], inplace=True)
 languages_list = []
+top_languages = []
 for i in range(0, len(data_all)):
-    #print(i)
     dict_list = ast.literal_eval(data_all.iloc[i]["spoken_languages"])
     for j in range(0, len(dict_list)):
         name = dict_list[j]["iso_639_1"]
-        name = str("spoken_languages="+name)
-        if name not in languages_list:
-            languages_list.append(name)
+        languages_list.append(name)
+languages_count = Counter(languages_list)
+for i in languages_count.most_common(25):
+    top_languages.append(str('spoken_languages=')+i[0])            
 #根据类别重新构造feature咯
-data = np.zeros((len(data_all), len(languages_list)))
-languages_df = pd.DataFrame(data, columns=languages_list, index=data_all.index.values)
+data = np.zeros((len(data_all), len(top_languages)))
+languages_df = pd.DataFrame(data, columns=top_languages, index=data_all.index.values)
 data = np.zeros((len(data_all), 1))
 num_df = pd.DataFrame(data, columns=["languages_num"], index=data_all.index.values)
 for i in range(0, len(data_all)):
-    dict_list = ast.literal_eval(data_all.iloc[i]["spoken_languages"])
     num_df.iloc[i] = len(dict_list)
+    dict_list = ast.literal_eval(data_all.iloc[i]["spoken_languages"])
     for j in range(0, len(dict_list)):
         name = dict_list[j]["iso_639_1"]
         name = str("spoken_languages="+name)
@@ -1137,6 +1160,9 @@ data_all = data_all.drop(["spoken_languages"], axis=1)
 #print(np.log1p(num_df).skew())
 num_df = np.log(num_df)
 data_all = pd.concat([data_all, languages_df, num_df], axis=1)
+"""
+
+
 
 #考虑处理status这个特征咯,暂时不知道咋用直接粗暴使用
 data_all.loc[(data_all.status.isnull()), 'status'] = "null"
@@ -1204,22 +1230,29 @@ data_all['len_original_title'] = np.log1p(data_all['len_original_title'])
 #print(np.log1p(data_all['words_original_title']).skew())
 data_all['words_original_title'] = np.log(data_all['words_original_title'])
 
+
+
 """
 #考虑处理production_companies这个特征咯,暂时不知道咋用直接粗暴使用
 #data_all["production_companies"].fillna("[{'name': 'null', 'id': 4}]", inplace=True)
 data_all["production_companies"].fillna(data_all["production_companies"].mode()[0], inplace=True) 
 companies_list = []
+top_companies = []
 for i in range(0, len(data_all)):
     dict_list = ast.literal_eval(data_all.iloc[i]["production_companies"])
     for j in range(0, len(dict_list)):
         name = dict_list[j]["name"]
-        name = str("production_companies="+name)
-        if name not in companies_list:
-            companies_list.append(name)
+        companies_list.append(name)
+companies_count = Counter(companies_list)
+for i in companies_count.most_common(40):
+    top_companies.append(str('production_companies=')+i[0])
 #根据类别重新构造feature咯
-data = np.zeros((len(data_all), len(companies_list)))
-companies_df = pd.DataFrame(data, columns=companies_list, index=data_all.index.values)
+data = np.zeros((len(data_all), len(top_companies)))
+companies_df = pd.DataFrame(data, columns=top_companies, index=data_all.index.values)
+data = np.zeros((len(data_all), 1))
+num_df = pd.DataFrame(data, columns=["companies_num"], index=data_all.index.values)
 for i in range(0, len(data_all)):
+    num_df.iloc[i] = len(dict_list)
     dict_list = ast.literal_eval(data_all.iloc[i]["production_companies"])
     for j in range(0, len(dict_list)):
         name = dict_list[j]["name"]
@@ -1227,130 +1260,107 @@ for i in range(0, len(data_all)):
         companies_df.iloc[i][name] = 1
 #丢弃data_all中的genres特征，然后合并新的genres_df
 data_all = data_all.drop(["production_companies"], axis=1)
-data_all = pd.concat([data_all, companies_df], axis=1)
-"""
-#kernel里面的处理这些特征的代码确实没看懂，哎就将就使用我现在的代码吧
-data_all["production_companies"].fillna(data_all["production_companies"].mode()[0], inplace=True) 
-data = np.zeros((len(data_all), 1))
-num_df = pd.DataFrame(data, columns=["companies_num"], index=data_all.index.values)
-for i in range(0, len(data_all)):
-    dict_list = ast.literal_eval(data_all.iloc[i]["production_companies"])
-    num_df.iloc[i] = len(dict_list)
-#丢弃data_all中的genres特征，然后合并新的genres_df
-data_all = data_all.drop(["production_companies"], axis=1)
 num_df = np.log(num_df)
-data_all = pd.concat([data_all, num_df], axis=1)
+data_all = pd.concat([data_all, companies_df, num_df], axis=1)
+"""
+
 
 """
-#这个也是有一万多个关键词暂时还是不用吧
 #考虑处理Keywords这个特征咯,暂时不知道咋用直接粗暴使用
 data_all["Keywords"].fillna(data_all["Keywords"].dropna().mode()[0], inplace=True) 
 Keywords_list = []
+top_Keywords = []
 for i in range(0, len(data_all)):
-    print(i)
     dict_list = ast.literal_eval(data_all.iloc[i]["Keywords"])
     for j in range(0, len(dict_list)):
         name = dict_list[j]["name"]
-        name = str("Keywords="+name)
-        if name not in Keywords_list:
-            Keywords_list.append(name)
+        Keywords_list.append(name)
+Keywords_count = Counter(Keywords_list)
+for i in Keywords_count.most_common(40):
+    top_Keywords.append(str('Keywords=')+i[0])
 #根据类别重新构造feature咯
-data = np.zeros((len(data_all), len(Keywords_list)))
-Keywords_df = pd.DataFrame(data, columns=Keywords_list, index=data_all.index.values)
+data = np.zeros((len(data_all), len(top_Keywords)))
+Keywords_df = pd.DataFrame(data, columns=top_Keywords, index=data_all.index.values)
+data = np.zeros((len(data_all), 1))
+num_df = pd.DataFrame(data, columns=["Keywords_num"], index=data_all.index.values)
 for i in range(0, len(data_all)):
+    num_df.iloc[i] = len(dict_list)
     dict_list = ast.literal_eval(data_all.iloc[i]["Keywords"])
     for j in range(0, len(dict_list)):
         name = dict_list[j]["name"]
         name = str("Keywords="+name)
         Keywords_df.iloc[i][name] = 1
 data_all = data_all.drop(["Keywords"], axis=1)
-data_all = pd.concat([data_all, Keywords_df], axis=1)
-"""
-data_all["Keywords"].fillna(data_all["Keywords"].mode()[0], inplace=True) 
-data = np.zeros((len(data_all), 1))
-num_df = pd.DataFrame(data, columns=["keywords_num"], index=data_all.index.values)
-for i in range(0, len(data_all)):
-    dict_list = ast.literal_eval(data_all.iloc[i]["Keywords"])
-    num_df.iloc[i] = len(dict_list)
-#丢弃data_all中的genres特征，然后合并新的genres_df
-data_all = data_all.drop(["Keywords"], axis=1)
 #print(num_df.skew())
 #print(np.log(num_df).skew())
 #print(np.log1p(num_df).skew())
 num_df = np.log1p(num_df)
-data_all = pd.concat([data_all, num_df], axis=1)
+data_all = pd.concat([data_all, Keywords_df, num_df], axis=1)
+"""
+
 
 """
 #考虑处理cast这个特征咯,暂时不知道咋用直接粗暴使用
 data_all["cast"].fillna(data_all["cast"].mode()[0], inplace=True) 
 cast_list = []
+top_cast = []
 for i in range(0, len(data_all)):
     dict_list = ast.literal_eval(data_all.iloc[i]["cast"])
     for j in range(0, len(dict_list)):
         name = dict_list[j]["name"]
-        name = str("cast="+name)
-        if name not in cast_list:
-            cast_list.append(name)
+        cast_list.append(name)
+cast_count = Counter(cast_list)
+for i in cast_count.most_common(40):
+    top_cast.append(str('cast=')+i[0])
 #根据类别重新构造feature咯
-data = np.zeros((len(data_all), len(cast_list)))
-cast_df = pd.DataFrame(data, columns=cast_list, index=data_all.index.values)
+data = np.zeros((len(data_all), len(top_cast)))
+cast_df = pd.DataFrame(data, columns=top_cast, index=data_all.index.values)
+data = np.zeros((len(data_all), 1))
+num_df = pd.DataFrame(data, columns=["cast_num"], index=data_all.index.values)
 for i in range(0, len(data_all)):
+    num_df.iloc[i] = len(dict_list)
     dict_list = ast.literal_eval(data_all.iloc[i]["cast"])
     for j in range(0, len(dict_list)):
         name = dict_list[j]["name"]
         name = str("cast="+name)
         cast_df.iloc[i][name] = 1
+num_df = np.log1p(num_df)
 data_all = data_all.drop(["cast"], axis=1)
-data_all = pd.concat([data_all, cast_df], axis=1)
+data_all = pd.concat([data_all, cast_df, num_df], axis=1)
+"""
+
+
 
 #考虑处理crew这个特征咯,暂时不知道咋用直接粗暴使用
 data_all["crew"].fillna(data_all["crew"].mode()[0], inplace=True) 
 crew_list = []
+top_crew = []
 for i in range(0, len(data_all)):
     dict_list = ast.literal_eval(data_all.iloc[i]["crew"])
     for j in range(0, len(dict_list)):
         name = dict_list[j]["name"]
-        name = str("crew="+name)
-        if name not in crew_list:
-            crew_list.append(name)
+        crew_list.append(name)
+crew_count = Counter(crew_list)
+for i in crew_count.most_common(40):
+    top_crew.append(str('crew=')+i[0])
 #根据类别重新构造feature咯
-data = np.zeros((len(data_all), len(crew_list)))
-crew_df = pd.DataFrame(data, columns=crew_list, index=data_all.index.values)
+data = np.zeros((len(data_all), len(top_crew)))
+crew_df = pd.DataFrame(data, columns=top_crew, index=data_all.index.values)
+data = np.zeros((len(data_all), 1))
+num_df = pd.DataFrame(data, columns=["crew_num"], index=data_all.index.values)
 for i in range(0, len(data_all)):
+    num_df.iloc[i] = len(dict_list)
     dict_list = ast.literal_eval(data_all.iloc[i]["crew"])
     for j in range(0, len(dict_list)):
         name = dict_list[j]["name"]
         name = str("crew="+name)
         crew_df.iloc[i][name] = 1
 data_all = data_all.drop(["crew"], axis=1)
-data_all = pd.concat([data_all, crew_df], axis=1)
-"""
-data_all["cast"].fillna(data_all["cast"].mode()[0], inplace=True) 
-data = np.zeros((len(data_all), 1))
-num_df = pd.DataFrame(data, columns=["cast_num"], index=data_all.index.values)
-for i in range(0, len(data_all)):
-    dict_list = ast.literal_eval(data_all.iloc[i]["cast"])
-    num_df.iloc[i] = len(dict_list)
-#丢弃data_all中的genres特征，然后合并新的genres_df
-data_all = data_all.drop(["cast"], axis=1)
+num_df = np.log1p(num_df)
 #print(num_df.skew())
 #print(np.log(num_df).skew())
 #print(np.log1p(num_df).skew())
-num_df = np.log1p(num_df)
-data_all = pd.concat([data_all, num_df], axis=1)
-
-data_all["crew"].fillna(data_all["crew"].mode()[0], inplace=True) 
-data = np.zeros((len(data_all), 1))
-num_df = pd.DataFrame(data, columns=["crew_num"], index=data_all.index.values)
-for i in range(0, len(data_all)):
-    dict_list = ast.literal_eval(data_all.iloc[i]["crew"])
-    num_df.iloc[i] = len(dict_list)
-data_all = data_all.drop(["crew"], axis=1)
-#print(num_df.skew())
-#print(np.log(num_df).skew())
-#print(np.log1p(num_df).skew())
-num_df = np.log1p(num_df)
-data_all = pd.concat([data_all, num_df], axis=1)
+data_all = pd.concat([data_all, crew_df, num_df], axis=1)
 
 data_all.to_csv("temp1.csv", index=False)
 print(data_all[data_all.isnull().values==True])
