@@ -1,6 +1,10 @@
 #coding=utf-8
-#上个版本的特征工程稍有瑕疵，我觉得可以花三个小时的时间弥补一下
-#这个是尽量使用np.log或者np.lop1的数据处理的版本
+#将上两个版本得到的数据用lgb进行快速计算，惊呆我了效果提升非常的明显
+#除了使用kernel里面的一些想法以外，我自己洞察出来log与log1p的精妙用法真的开森
+#然后是lgb真的没让我失望，700次超参搜索居然只用了40分钟，炫酷到爆炸~~
+#接下来是准备实现两个版本的stacking咯
+#如果还有时间就试一下增加新的数据如何实现
+#如果还有时间就在试一下那个自动创建特征的库咯
 import ast
 import math
 import pickle
@@ -191,7 +195,7 @@ def xgb_f(params):
                        random_state=42)
 
     #skf = StratifiedKFold(Y_train, n_folds=25, shuffle=True, random_state=42)
-    metric = cross_val_score(rsg, X_train_scaled, Y_train, cv=10, scoring="neg_mean_squared_error").mean()
+    metric = cross_val_score(rsg, X_train_scaled, Y_train, cv=8, scoring="neg_mean_squared_error").mean()
     
     print(-metric)
     #主要我想看rmse的结果，但是metric的结果是负数
@@ -298,7 +302,7 @@ def cat_f(params):
                             task_type='GPU')
 
     #skf = StratifiedKFold(Y_train, n_folds=25, shuffle=True, random_state=42)
-    metric = cross_val_score(rsg, X_train_scaled, Y_train, cv=10, scoring="neg_mean_squared_error").mean()
+    metric = cross_val_score(rsg, X_train_scaled, Y_train, cv=8, scoring="neg_mean_squared_error").mean()
     
     print(-metric)
     #主要我想看rmse的结果，但是metric的结果是负数
@@ -348,9 +352,9 @@ cat_space = {"title":hp.choice("title", ["stacked_tmdb_box_office_prediction"]),
              "path":hp.choice("path", ["TMDB_Box_Office_Prediction.csv"]),
              "mean":hp.choice("mean", [0]),
              "std":hp.choice("std", [0]),
-             "iterations":hp.choice("iterations", [800, 1000, 1200, 1400]),
+             "iterations":hp.choice("iterations", [800, 1000, 1200]),
              "learning_rate":hp.choice("learning_rate", np.linspace(0.01, 0.30, 30)),
-             "depth":hp.choice("depth", [3, 4, 5, 6, 8, 9, 11]),
+             "depth":hp.choice("depth", [3, 4, 6, 9, 11]),
              "l2_leaf_reg":hp.choice("l2_leaf_reg", [2, 3, 5, 7, 9]),
              #"n_estimators":hp.choice("n_estimators", [3, 4, 5, 6, 8, 9, 11]),
              #"loss_function":hp.choice("loss_function", ["RMSE"]),#这个就是默认的
@@ -366,9 +370,9 @@ cat_space_nodes = {"title":["stacked_tmdb_box_office_prediction"],
                    "mean":[0],
                    "std":[0],
                    #"feature_num":np.linspace(1,300,300),
-                   "iterations":[800, 1000, 1200, 1400],
+                   "iterations":[800, 1000, 1200],
                    "learning_rate":np.linspace(0.01, 0.30, 30),
-                   "depth":[3, 4, 5, 6, 8, 9, 11],
+                   "depth":[3, 4, 6, 9, 11],
                    "l2_leaf_reg":[2, 3, 5, 7, 9],
                    #"n_estimators":[3, 4, 5, 6, 8, 9, 11],
                    #"loss_function":["RMSE"],#这个就是默认的
@@ -894,523 +898,88 @@ lgb_space_nodes = {"title":["stacked_tmdb_box_office_prediction"],
 #原来那个自动创造特征的东西好像叫做auto feature engineering 
 #我现在感觉工作量很大的样子呀。。。。。
 
-#读取数据并合并咯
-#之前我自己用excel修改了日期样式必须用ANSI才能读入
-#data_train = pd.read_csv("train.csv", encoding="ANSI")
-#data_test = pd.read_csv("test.csv", encoding="ANSI")
-#现在我用kernel里面的处理日期的方式，发现ANSI不能读入了，所以用下面的方式
-start_time = datetime.datetime.now()
-data_train = pd.read_csv("train.csv")
+
+"""
+data_train =  pd.read_csv("train.csv")
 data_test = pd.read_csv("test.csv")
-temp = data_train["revenue"]
-
-#这里直接使用一下别人创建出来的特征咯,这个好像不是别人创建的，是imdb上面能够找到的？
-data_train_add = pd.read_csv('TrainAdditionalFeatures.csv')
-data_test_add = pd.read_csv('TestAdditionalFeatures.csv')
-data_train = pd.merge(data_train, data_train_add, how='left', on=['imdb_id'])
-data_test = pd.merge(data_test, data_test_add, how='left', on=['imdb_id'])
-
-data_all = pd.concat([data_train, data_test], axis=0)
-data_all = data_all.drop(["id","revenue"], axis=1)
-#X_all = data_all.drop(["id","revenue"], axis=1)
-
-#先看一哈总体缺失的内容到底有什么
-#个人觉得belongs_to_collection、homepage简单使用。tagline搞不好都可以
-#Keywords                  669
-#belongs_to_collection    5917
-#budget                      0
-#cast                       26
-#crew                       38
-#genres                     23
-#homepage                 5032
-#imdb_id                     0
-#original_language           0
-#original_title              0
-#overview                   22
-#popularity                  0
-#poster_path                 2
-#production_companies      414
-#production_countries      157
-#release_date                1
-#runtime                     6
-#spoken_languages           62
-#status                      2
-#tagline                  1460
-#title                       3
-print(data_all.isnull().sum())
-
-
-#接下来先把新导入的特征给处理掉再说吧
-data_all["popularity2"].fillna(data_all["popularity2"].dropna().mean(), inplace=True)
-#print(data_all["popularity"].skew())
-#print(np.log(data_all["popularity"]).skew())
-#print(np.log1p(data_all["popularity"]).skew())
-data_all["popularity2"] = np.log1p(data_all["popularity2"])
-
-data_all["rating"].fillna(data_all["rating"].dropna().mean(), inplace=True)
-#print(data_all["rating"].skew())
-#print(np.log(data_all["rating"]).skew())
-#print(np.log1p(data_all["rating"]).skew())
-#data_all["rating"] = np.log1p(data_all["rating"])
-
-data_all["totalVotes"].fillna(data_all["totalVotes"].dropna().mean(), inplace=True)
-#print(data_all["totalVotes"].skew())
-#print(np.log(data_all["totalVotes"]).skew())
-#print(np.log1p(data_all["totalVotes"]).skew())
-data_all["totalVotes"] = np.log1p(data_all["totalVotes"])
-
-
-
-#直接将belongs_to_collection的数据删除了吗，主要感觉不知道怎么用
-#这样吧，直接将其替换为有无，这样从信息的角度上看，应该信息更丰富一些
-#data_all.drop(["belongs_to_collection"], axis=1)
-data_all.loc[(data_all.belongs_to_collection.notnull()), 'belongs_to_collection'] = "not null"
-data_all.loc[(data_all.belongs_to_collection.isnull()), 'belongs_to_collection'] = "null"
-
-#处理budget属性就直接用很简单的平均数代替了吧,并不需要用其他值预估咯
-#data_all["budget"].fillna(data_all["budget"].mode()[0], inplace=True) 
-#均值 np.mean(nums) #中位数 np.median(nums) #众数 np.mode()[0]
-data_all["budget"].fillna(data_all["budget"].dropna().mean(), inplace=True)
-#因为这个budget并不符合正态分布，所以需要使用np.log进行转换咯
-#sns.distplot(data_all["budget"], rug=True)
-#plt.show()
-#偏度本身有个临界值，有些代码是觉得大于1或者0.6就要进行np.log计算咯
-#我好想一直不知道np.log np.log1p np.log10怎么选择，看了下面的数据我心里有底咯
-#print(data_all["budget"].skew())
-#print(np.log(data_all["budget"]).skew())
-#print(np.log1p(data_all["budget"]).skew())
-#print(np.log2(data_all["budget"]).skew())
-#print(np.log10(data_all["budget"]).skew())
-#print(temp.skew())
-#print(np.log(temp).skew())
-#print(np.log1p(temp).skew())
-#print(np.log2(temp).skew())
-#print(np.log10(temp).skew())
-#下面这几行代码果然已经显示了MinMaxScaler()前后的data_all["budget"].skew()数值差不多的，跟我预期差不多的
-#data_all["budget"] = np.log1p(data_all["budget"])
-#print(data_all["budget"].skew())
-#print(pd.DataFrame(MinMaxScaler().fit_transform(pd.DataFrame(data = data_all["budget"]))).skew())
-data_all["budget"] = np.log1p(data_all["budget"])
-
-
-
-
-#genres的特征应该如何处理，感觉好像很麻烦的样子
-#由于genres存在为空的情况，所以先将空的填充为[]
-#下面整理好了所有的genres下面的类比
-#data_all["genres"].fillna("[]", inplace=True)
-#看了别人的攻略之后，我发现这里应该添加一个电影种类总数genres_num
-data_all["genres"].fillna(data_all["genres"].dropna().mode()[0], inplace=True) 
-genres_list = []
-for i in range(0, len(data_all)):
-    #这边如果不使用iloc那么结果就是错误的，取得的对象是str类型的
-    #print(data_all.iloc[i]["genres"])
-    #print(i)
-    dict_list = ast.literal_eval(data_all.iloc[i]["genres"])
-    for j in range(0, len(dict_list)):
-        name = dict_list[j]["name"]
-        name = str("genres="+name)
-        if name not in genres_list:
-            genres_list.append(name)
-            #print(genres_list)
-#根据类别重新构造feature咯
-data = np.zeros((len(data_all), len(genres_list)))
-genres_df = pd.DataFrame(data, columns=genres_list, index=data_all.index.values)
-data = np.zeros((len(data_all), 1))
-num_df = pd.DataFrame(data, columns=["genres_num"], index=data_all.index.values)
-for i in range(0, len(data_all)):
-    dict_list = ast.literal_eval(data_all.iloc[i]["genres"])
-    num_df.iloc[i] = len(dict_list)
-    for j in range(0, len(dict_list)):
-        name = dict_list[j]["name"]
-        name = str("genres="+name)
-        genres_df.iloc[i][name] = 1
-#丢弃data_all中的genres特征，然后合并新的genres_df
-data_all = data_all.drop(["genres"], axis=1)
-#因为np.log1p(num_df).skew()更小一点所以决定采用它
-#print(num_df.skew())
-#print(np.log(num_df).skew())
-#print(np.log1p(num_df).skew())
-num_df = np.log1p(num_df)
-data_all = pd.concat([data_all, genres_df, num_df], axis=1)
-
-
-
-
-#现在考虑处理homepage这个特征咯
-data_all.loc[(data_all.homepage.notnull()), 'homepage'] = "not null"
-data_all.loc[(data_all.homepage.isnull()), 'homepage'] = "null"
-#考虑处理imdb_id这个特征咯
-data_all.loc[(data_all.imdb_id.notnull()), 'imdb_id'] = "not null"
-data_all.loc[(data_all.imdb_id.isnull()), 'imdb_id'] = "null"
-#考虑处理original_language这个特征咯
-data_all["original_language"].fillna(data_all["original_language"].dropna().mode()[0], inplace=True)
-
-#考虑处理popularity这个特征咯,暂时不知道咋用直接粗暴使用
-#下面的代码发现这个data_all["popularity"]属性还是比较歪斜的
-#np.log1p(data_all["popularity"])比起np.log(data_all["popularity"])更接近正态分布，所以选择它
-data_all["popularity"].fillna(data_all["popularity"].dropna().mean(), inplace=True)
-#sns.distplot(data_all["popularity"], rug=True)
-#plt.show()
-#print(data_all["popularity"].skew())
-#print(np.log(data_all["popularity"]).skew())
-#print(np.log1p(data_all["popularity"]).skew())
-data_all["popularity"] = np.log1p(data_all["popularity"])
-
-#考虑处理poster_path这个特征咯,暂时不知道咋用直接粗暴使用
-data_all.loc[(data_all.poster_path.notnull()), 'poster_path'] = "not null"
-data_all.loc[(data_all.poster_path.isnull()), 'poster_path'] = "null"
-
-
-
-
-
-#考虑处理production_countries这个特征咯
-#data_all["production_countries"].fillna("[{'iso_3166_1': 'null', 'name': 'null'}]", inplace=True)
-data_all["production_countries"].fillna(data_all["production_countries"].dropna().mode()[0], inplace=True) 
-countries_list = []
-top_countries = []
-for i in range(0, len(data_all)):
-    dict_list = ast.literal_eval(data_all.iloc[i]["production_countries"])
-    for j in range(0, len(dict_list)):
-        name = dict_list[j]["iso_3166_1"]
-        countries_list.append(name)
-countries_count = Counter(countries_list)
-for i in countries_count.most_common(20):
-    top_countries.append(str('production_countries=')+i[0])
-#根据类别重新构造feature咯
-data = np.zeros((len(data_all), len(top_countries)))
-countries_df = pd.DataFrame(data, columns=top_countries, index=data_all.index.values)
-data = np.zeros((len(data_all), 1))
-num_df = pd.DataFrame(data, columns=["countries_num"], index=data_all.index.values)
-for i in range(0, len(data_all)):
-    num_df.iloc[i] = len(dict_list)
-    dict_list = ast.literal_eval(data_all.iloc[i]["production_countries"])
-    for j in range(0, len(dict_list)):
-        name = dict_list[j]["iso_3166_1"]
-        name = str("production_countries="+name)
-        countries_df.iloc[i][name] = 1
-#print(num_df.skew())
-#print(np.log(num_df).skew())
-#print(np.log1p(num_df).skew())
-num_df = np.log(num_df)
-data_all = data_all.drop(["production_countries"], axis=1)
-data_all = pd.concat([data_all, countries_df, num_df], axis=1)
-
-
-
-
-
-
-
-data_all["release_date"].fillna(data_all["release_date"].dropna().mode()[0], inplace=True) 
-#这个kernel里面的修复函数的代码真的有点意思熬
-def fix_date(x):
-    #Fixes dates which are in 20xx
-    #print(x)
-    year = x.split('/')[2]
-    if int(year) <= 19:
-        return x[:-2] + '20' + year
-    else:
-        return x[:-2] + '19' + year
-data_all['release_date'] = data_all['release_date'].apply(lambda x: fix_date(x))
-#将日期由2/20/2015的形式修改为2015-02-20的形式
-data_all['release_date'] = pd.to_datetime(data_all['release_date'])
-# creating features based on dates
-def process_date(df):
-    date_parts = ["year", "weekday", "month", 'weekofyear', 'day', 'quarter']
-    for part in date_parts:
-        part_col = 'release_date' + "_" + part
-        df[part_col] = getattr(df['release_date'].dt, part).astype(int)
-    
-    return df
-#按道理来说，这里应该使用one-hot编码的，但是导致特征过于稀疏，所以还是将就这样使用了吧
-data_all = process_date(data_all)
-data_all = data_all.drop(["release_date"], axis=1)
-#这里的分布还比较符合正态分布，所以感觉不用
-#print(data_all['release_date_year'].skew()) #
-#print(np.log(data_all['release_date_year']).skew())
-#print(np.log1p(data_all['release_date_year']).skew())
-#print(data_all['release_date_weekday'].skew()) #
-#print(np.log(data_all['release_date_weekday']).skew())
-#print(np.log1p(data_all['release_date_weekday']).skew())
-#print(data_all['release_date_month'].skew()) #
-#print(np.log(data_all['release_date_month']).skew())
-#print(np.log1p(data_all['release_date_month']).skew())
-#print(data_all['release_date_weekofyear'].skew()) #
-#print(np.log(data_all['release_date_weekofyear']).skew())
-#print(np.log1p(data_all['release_date_weekofyear']).skew())
-#print(data_all['release_date_day'].skew()) #
-#print(np.log(data_all['release_date_day']).skew())
-#print(np.log1p(data_all['release_date_day']).skew())
-#print(data_all['release_date_quarter'].skew()) #
-#print(np.log(data_all['release_date_quarter']).skew())
-#print(np.log1p(data_all['release_date_quarter']).skew())
-
-
-
-
-
-data_all["runtime"].fillna(data_all["runtime"].dropna().mean(), inplace=True)
-#这个属性已经比较正态分布了，感觉可以直接使用
-#print(data_all['runtime'].skew()) #
-#print(np.log(data_all['runtime']).skew())
-#print(np.log1p(data_all['runtime']).skew())
-
-
-
-
-#准备处理spoken_languages这个特征咯
-#spoken_languages的na无法被赋值，我真的是想要哭了，为什么这样对我？？后来重新开关机就行了
-data_all["spoken_languages"].fillna(data_all["spoken_languages"].dropna().mode()[0], inplace=True)
-languages_list = []
-top_languages = []
-for i in range(0, len(data_all)):
-    dict_list = ast.literal_eval(data_all.iloc[i]["spoken_languages"])
-    for j in range(0, len(dict_list)):
-        name = dict_list[j]["iso_639_1"]
-        languages_list.append(name)
-languages_count = Counter(languages_list)
-for i in languages_count.most_common(20):
-    top_languages.append(str('spoken_languages=')+i[0])            
-#根据类别重新构造feature咯
-data = np.zeros((len(data_all), len(top_languages)))
-languages_df = pd.DataFrame(data, columns=top_languages, index=data_all.index.values)
-data = np.zeros((len(data_all), 1))
-num_df = pd.DataFrame(data, columns=["languages_num"], index=data_all.index.values)
-for i in range(0, len(data_all)):
-    num_df.iloc[i] = len(dict_list)
-    dict_list = ast.literal_eval(data_all.iloc[i]["spoken_languages"])
-    for j in range(0, len(dict_list)):
-        name = dict_list[j]["iso_639_1"]
-        name = str("spoken_languages="+name)
-        languages_df.iloc[i][name] = 1
-data_all = data_all.drop(["spoken_languages"], axis=1)
-#print(num_df.skew())
-#print(np.log(num_df).skew())
-#print(np.log1p(num_df).skew())
-num_df = np.log(num_df)
-data_all = pd.concat([data_all, languages_df, num_df], axis=1)
-
-
-
-
-
-#考虑处理status这个特征咯,暂时不知道咋用直接粗暴使用
-data_all.loc[(data_all.status.isnull()), 'status'] = "null"
-data_all.loc[(data_all.status.notnull()), 'status'] = "not null"
-
-"""
-这个处理方法太消耗时间了，感觉完全没办法采用这个方式，算了还是简单使用吧
-#下面是处理overview这个特征咯
-vectorizer = TfidfVectorizer(
-             sublinear_tf=True,
-             analyzer='word',
-             token_pattern=r'\w{1,}',
-             ngram_range=(1, 2),
-             min_df=5)
-overview_text = vectorizer.fit_transform(data_train['overview'].fillna(''))
-#eli5.show_weights(linreg, vec=vectorizer, top=20, feature_filter=lambda x: x != '<BIAS>')
-overview_text_df = pd.DataFrame(data=overview_text.toarray(), index=data_train.index.values)
-rfc_model = LinearRegression().fit(overview_text_df, np.log1p(temp))
-perm = PermutationImportance(rfc_model, random_state=42).fit(overview_text_df, np.log1p(temp))
-feature_importances1 = perm.feature_importances_#这是返回每个特征的权重
-#这里是将tuple元素转化为list从而进行排序，然后通过选择第k大的元素控制选择的特征
-feature_importances_list = list(feature_importances1)
-feature_importances_list.sort()
-feature_importances_std = perm.feature_importances_std_ 
-feature_importances2 = np.where(feature_importances1>feature_importances_list[-21])#这样是表示选择了20个特征咯
-#下面才是真正的把所有的特征都选出来了
-overview_text_df_new = overview_text_df[overview_text_df.columns[feature_importances2]]
-#下面的做法减小了skew的值，个人觉得应该更加适合机器学习吧
-overview_text_df_new = np.log1p(overview_text_df_new)
-data_all = data_all.drop(["overview"], axis=1)
-data_all = pd.concat([data_all, overview_text_df_new], axis=1)
-"""
-
-for col in ['title', 'tagline', 'overview', 'original_title']:
-    data_all['len_' + col] = data_all[col].fillna('').apply(lambda x: len(str(x)))
-    data_all['words_' + col] = data_all[col].fillna('').apply(lambda x: len(str(x.split(' '))))
-data_all = data_all.drop(['title', 'tagline', 'original_title', 'overview'], axis=1)
-#print(data_all['len_title'].skew())
-#print(np.log(data_all['len_title']).skew())
-#print(np.log1p(data_all['len_title']).skew()) #
-data_all['len_title'] = np.log1p(data_all['len_title'])
-#print(data_all['words_title'].skew())
-#print(np.log(data_all['words_title']).skew()) #
-#print(np.log1p(data_all['words_title']).skew())
-data_all['words_title'] = np.log(data_all['words_title'])
-#print(data_all['len_tagline'].skew())
-#print(np.log(data_all['len_tagline']).skew())
-#print(np.log1p(data_all['len_tagline']).skew()) #
-data_all['len_tagline'] = np.log1p(data_all['len_tagline'])
-#print(data_all['words_tagline'].skew())
-#print(np.log(data_all['words_tagline']).skew())
-#print(np.log1p(data_all['words_tagline']).skew()) #
-data_all['words_tagline'] = np.log1p(data_all['words_tagline'])
-#print(data_all['len_overview'].skew()) #
-#print(np.log(data_all['len_overview']).skew())
-#print(np.log1p(data_all['len_overview']).skew())
-#print(data_all['words_overview'].skew()) #
-#print(np.log(data_all['words_overview']).skew())
-#print(np.log1p(data_all['words_overview']).skew())
-#print(data_all['len_original_title'].skew())
-#print(np.log(data_all['len_original_title']).skew())
-#print(np.log1p(data_all['len_original_title']).skew()) #
-data_all['len_original_title'] = np.log1p(data_all['len_original_title'])
-#print(data_all['words_original_title'].skew())
-#print(np.log(data_all['words_original_title']).skew()) #
-#print(np.log1p(data_all['words_original_title']).skew())
-data_all['words_original_title'] = np.log(data_all['words_original_title'])
-
-
-
-
-#考虑处理production_companies这个特征咯,暂时不知道咋用直接粗暴使用
-#data_all["production_companies"].fillna("[{'name': 'null', 'id': 4}]", inplace=True)
-data_all["production_companies"].fillna(data_all["production_companies"].mode()[0], inplace=True) 
-companies_list = []
-top_companies = []
-for i in range(0, len(data_all)):
-    dict_list = ast.literal_eval(data_all.iloc[i]["production_companies"])
-    for j in range(0, len(dict_list)):
-        name = dict_list[j]["name"]
-        companies_list.append(name)
-companies_count = Counter(companies_list)
-for i in companies_count.most_common(35):
-    top_companies.append(str('production_companies=')+i[0])
-#根据类别重新构造feature咯
-data = np.zeros((len(data_all), len(top_companies)))
-companies_df = pd.DataFrame(data, columns=top_companies, index=data_all.index.values)
-data = np.zeros((len(data_all), 1))
-num_df = pd.DataFrame(data, columns=["companies_num"], index=data_all.index.values)
-for i in range(0, len(data_all)):
-    num_df.iloc[i] = len(dict_list)
-    dict_list = ast.literal_eval(data_all.iloc[i]["production_companies"])
-    for j in range(0, len(dict_list)):
-        name = dict_list[j]["name"]
-        name = str("production_companies="+name)
-        companies_df.iloc[i][name] = 1
-#丢弃data_all中的genres特征，然后合并新的genres_df
-data_all = data_all.drop(["production_companies"], axis=1)
-num_df = np.log(num_df)
-data_all = pd.concat([data_all, companies_df, num_df], axis=1)
-
-
-
-
-#考虑处理Keywords这个特征咯,暂时不知道咋用直接粗暴使用
-data_all["Keywords"].fillna(data_all["Keywords"].dropna().mode()[0], inplace=True) 
-Keywords_list = []
-top_Keywords = []
-for i in range(0, len(data_all)):
-    dict_list = ast.literal_eval(data_all.iloc[i]["Keywords"])
-    for j in range(0, len(dict_list)):
-        name = dict_list[j]["name"]
-        Keywords_list.append(name)
-Keywords_count = Counter(Keywords_list)
-for i in Keywords_count.most_common(35):
-    top_Keywords.append(str('Keywords=')+i[0])
-#根据类别重新构造feature咯
-data = np.zeros((len(data_all), len(top_Keywords)))
-Keywords_df = pd.DataFrame(data, columns=top_Keywords, index=data_all.index.values)
-data = np.zeros((len(data_all), 1))
-num_df = pd.DataFrame(data, columns=["Keywords_num"], index=data_all.index.values)
-for i in range(0, len(data_all)):
-    num_df.iloc[i] = len(dict_list)
-    dict_list = ast.literal_eval(data_all.iloc[i]["Keywords"])
-    for j in range(0, len(dict_list)):
-        name = dict_list[j]["name"]
-        name = str("Keywords="+name)
-        Keywords_df.iloc[i][name] = 1
-data_all = data_all.drop(["Keywords"], axis=1)
-#print(num_df.skew())
-#print(np.log(num_df).skew())
-#print(np.log1p(num_df).skew())
-num_df = np.log1p(num_df)
-data_all = pd.concat([data_all, Keywords_df, num_df], axis=1)
-
-
-
-
-#考虑处理cast这个特征咯,暂时不知道咋用直接粗暴使用
-data_all["cast"].fillna(data_all["cast"].mode()[0], inplace=True) 
-cast_list = []
-top_cast = []
-for i in range(0, len(data_all)):
-    dict_list = ast.literal_eval(data_all.iloc[i]["cast"])
-    for j in range(0, len(dict_list)):
-        name = dict_list[j]["name"]
-        cast_list.append(name)
-cast_count = Counter(cast_list)
-for i in cast_count.most_common(40):
-    top_cast.append(str('cast=')+i[0])
-#根据类别重新构造feature咯
-data = np.zeros((len(data_all), len(top_cast)))
-cast_df = pd.DataFrame(data, columns=top_cast, index=data_all.index.values)
-data = np.zeros((len(data_all), 1))
-num_df = pd.DataFrame(data, columns=["cast_num"], index=data_all.index.values)
-for i in range(0, len(data_all)):
-    num_df.iloc[i] = len(dict_list)
-    dict_list = ast.literal_eval(data_all.iloc[i]["cast"])
-    for j in range(0, len(dict_list)):
-        name = dict_list[j]["name"]
-        name = str("cast="+name)
-        cast_df.iloc[i][name] = 1
-num_df = np.log1p(num_df)
-data_all = data_all.drop(["cast"], axis=1)
-data_all = pd.concat([data_all, cast_df, num_df], axis=1)
-
-
-
-
-#考虑处理crew这个特征咯,暂时不知道咋用直接粗暴使用
-data_all["crew"].fillna(data_all["crew"].mode()[0], inplace=True) 
-crew_list = []
-top_crew = []
-for i in range(0, len(data_all)):
-    dict_list = ast.literal_eval(data_all.iloc[i]["crew"])
-    for j in range(0, len(dict_list)):
-        name = dict_list[j]["name"]
-        crew_list.append(name)
-crew_count = Counter(crew_list)
-for i in crew_count.most_common(40):
-    top_crew.append(str('crew=')+i[0])
-#根据类别重新构造feature咯
-data = np.zeros((len(data_all), len(top_crew)))
-crew_df = pd.DataFrame(data, columns=top_crew, index=data_all.index.values)
-data = np.zeros((len(data_all), 1))
-num_df = pd.DataFrame(data, columns=["crew_num"], index=data_all.index.values)
-for i in range(0, len(data_all)):
-    num_df.iloc[i] = len(dict_list)
-    dict_list = ast.literal_eval(data_all.iloc[i]["crew"])
-    for j in range(0, len(dict_list)):
-        name = dict_list[j]["name"]
-        name = str("crew="+name)
-        crew_df.iloc[i][name] = 1
-data_all = data_all.drop(["crew"], axis=1)
-num_df = np.log1p(num_df)
-#print(num_df.skew())
-#print(np.log(num_df).skew())
-#print(np.log1p(num_df).skew())
-data_all = pd.concat([data_all, crew_df, num_df], axis=1)
-
-print(data_all[data_all.isnull().values==True])
-
-#将数据形成one-hot编码
-dict_vector = DictVectorizer(sparse=False)
-X_all = data_all
-X_all = dict_vector.fit_transform(X_all.to_dict(orient='record'))
-X_all = pd.DataFrame(data=X_all, columns=dict_vector.feature_names_)
-#将数据形成类似one-hot编码
-X_all_scaled = pd.DataFrame(MinMaxScaler().fit_transform(X_all), columns = X_all.columns)
-X_all_scaled = pd.DataFrame(data = X_all_scaled, index = X_all.index, columns = X_all_scaled.columns.values)
-X_train_scaled = X_all_scaled[:len(data_train)]
-X_test_scaled = X_all_scaled[len(data_train):]
-Y_train = np.log1p(data_train["revenue"])
-#将数据进行存储吧，不然每次经过上述的特征提取实在太花费时间了
-X_train_scaled.to_csv("train_scaled_1.csv", index=False)
-X_test_scaled.to_csv("test_scaled_1.csv", index=False)
+Y_train = data_train["revenue"]
+X_train_scaled = pd.read_csv("train_scaled_1.csv")
+X_test_scaled = pd.read_csv("test_scaled_1.csv")
+#X_train_scaled = pd.read_csv("train_scaled_2.csv")
+#X_test_scaled = pd.read_csv("test_scaled_2.csv")
+
+Y_train = np.log1p(Y_train)
+start_time = datetime.datetime.now()
+trials = Trials()
+algo = partial(tpe.suggest, n_startup_jobs=10)
+best = fmin(lgb_f, lgb_space, algo=tpe.suggest, max_evals=700, trials=trials)
+best_nodes = parse_lgb_nodes(trials, lgb_space_nodes)
+save_inter_params(trials, lgb_space_nodes, best_nodes, "tmdb_box_office_prediction")
+rsg = train_lgb_model(best_nodes, X_train_scaled, Y_train)
+
+Y_pred = rsg.predict(X_test_scaled)
+Y_pred = np.expm1(Y_pred)
+data = {"id":data_test["id"], "revenue":Y_pred}
+output = pd.DataFrame(data = data)
+output.to_csv("lgb_predicton_1_5_29.csv", index=False)
+#output.to_csv("lgb_predicton_2_5_29.csv", index=False)
 end_time = datetime.datetime.now()
-print(X_train_scaled.shape)
+print("time cost", (end_time - start_time))
+"""
+
+
+#个人感觉stacking的问题不是特别大，先把超参搜索做完了
+#剩下的东西都是不怎么花费时间的东西,只需要简单的设置参数至少可以blending吧
+data_train =  pd.read_csv("train.csv")
+data_test = pd.read_csv("test.csv")
+Y_train = data_train["revenue"]
+X_train_scaled = pd.read_csv("train_scaled_1.csv")
+X_test_scaled = pd.read_csv("test_scaled_1.csv")
+#X_train_scaled = pd.read_csv("train_scaled_2.csv")
+#X_test_scaled = pd.read_csv("test_scaled_2.csv")
+
+Y_train = np.log1p(Y_train)
+
+start_time = datetime.datetime.now()
+trials = Trials()
+algo = partial(tpe.suggest, n_startup_jobs=10)
+best = fmin(lgb_f, lgb_space, algo=tpe.suggest, max_evals=7000, trials=trials)
+best_nodes = parse_lgb_nodes(trials, lgb_space_nodes)
+save_inter_params(trials, lgb_space_nodes, best_nodes, "lgb_tmdb_box_office_prediction")
+rsg = train_lgb_model(best_nodes, X_train_scaled, Y_train)
+Y_pred = rsg.predict(X_test_scaled)
+Y_pred = np.expm1(Y_pred)
+data = {"id":data_test["id"], "revenue":Y_pred}
+output = pd.DataFrame(data = data)
+output.to_csv("lgb_predicton_1_stacking.csv", index=False)
+#output.to_csv("lgb_predicton_2_stacking.csv", index=False)
+
+trials = Trials()
+algo = partial(tpe.suggest, n_startup_jobs=10)
+best = fmin(xgb_f, xgb_space, algo=tpe.suggest, max_evals=700, trials=trials)
+best_nodes = parse_xgb_nodes(trials, xgb_space_nodes)
+save_inter_params(trials, xgb_space_nodes, best_nodes, "xgb_tmdb_box_office_prediction")
+rsg = train_xgb_model(best_nodes, X_train_scaled, Y_train)
+Y_pred = rsg.predict(X_test_scaled)
+Y_pred = np.expm1(Y_pred)
+data = {"id":data_test["id"], "revenue":Y_pred}
+output = pd.DataFrame(data = data)
+output.to_csv("xgb_predicton_1_stacking.csv", index=False)
+#output.to_csv("xgb_predicton_2_stacking.csv", index=False)
+
+
+trials = Trials()
+algo = partial(tpe.suggest, n_startup_jobs=10)
+best = fmin(cat_f, cat_space, algo=tpe.suggest, max_evals=300, trials=trials)
+best_nodes = parse_cat_nodes(trials, cat_space_nodes)
+save_inter_params(trials, cat_space_nodes, best_nodes, "cat_tmdb_box_office_prediction")
+rsg = train_cat_model(best_nodes, X_train_scaled, Y_train)
+Y_pred = rsg.predict(X_test_scaled)
+Y_pred = np.expm1(Y_pred)
+data = {"id":data_test["id"], "revenue":Y_pred}
+output = pd.DataFrame(data = data)
+output.to_csv("cat_predicton_1_stacking.csv", index=False)
+#output.to_csv("cat_predicton_2_stacking.csv", index=False)
+
+end_time = datetime.datetime.now()
 print("time cost", (end_time - start_time))

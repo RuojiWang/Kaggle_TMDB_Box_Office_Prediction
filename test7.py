@@ -1,6 +1,6 @@
 #coding=utf-8
 #上个版本的特征工程稍有瑕疵，我觉得可以花三个小时的时间弥补一下
-#这个是尽量使用np.log或者np.lop1的数据处理的版本
+#这个是尽量    不    使用np.log或者np.lop1的数据处理的版本
 import ast
 import math
 import pickle
@@ -942,23 +942,11 @@ print(data_all.isnull().sum())
 
 #接下来先把新导入的特征给处理掉再说吧
 data_all["popularity2"].fillna(data_all["popularity2"].dropna().mean(), inplace=True)
-#print(data_all["popularity"].skew())
-#print(np.log(data_all["popularity"]).skew())
-#print(np.log1p(data_all["popularity"]).skew())
 data_all["popularity2"] = np.log1p(data_all["popularity2"])
 
 data_all["rating"].fillna(data_all["rating"].dropna().mean(), inplace=True)
-#print(data_all["rating"].skew())
-#print(np.log(data_all["rating"]).skew())
-#print(np.log1p(data_all["rating"]).skew())
-#data_all["rating"] = np.log1p(data_all["rating"])
 
 data_all["totalVotes"].fillna(data_all["totalVotes"].dropna().mean(), inplace=True)
-#print(data_all["totalVotes"].skew())
-#print(np.log(data_all["totalVotes"]).skew())
-#print(np.log1p(data_all["totalVotes"]).skew())
-data_all["totalVotes"] = np.log1p(data_all["totalVotes"])
-
 
 
 #直接将belongs_to_collection的数据删除了吗，主要感觉不知道怎么用
@@ -1027,11 +1015,6 @@ for i in range(0, len(data_all)):
         genres_df.iloc[i][name] = 1
 #丢弃data_all中的genres特征，然后合并新的genres_df
 data_all = data_all.drop(["genres"], axis=1)
-#因为np.log1p(num_df).skew()更小一点所以决定采用它
-#print(num_df.skew())
-#print(np.log(num_df).skew())
-#print(np.log1p(num_df).skew())
-num_df = np.log1p(num_df)
 data_all = pd.concat([data_all, genres_df, num_df], axis=1)
 
 
@@ -1090,10 +1073,6 @@ for i in range(0, len(data_all)):
         name = dict_list[j]["iso_3166_1"]
         name = str("production_countries="+name)
         countries_df.iloc[i][name] = 1
-#print(num_df.skew())
-#print(np.log(num_df).skew())
-#print(np.log1p(num_df).skew())
-num_df = np.log(num_df)
 data_all = data_all.drop(["production_countries"], axis=1)
 data_all = pd.concat([data_all, countries_df, num_df], axis=1)
 
@@ -1186,10 +1165,6 @@ for i in range(0, len(data_all)):
         name = str("spoken_languages="+name)
         languages_df.iloc[i][name] = 1
 data_all = data_all.drop(["spoken_languages"], axis=1)
-#print(num_df.skew())
-#print(np.log(num_df).skew())
-#print(np.log1p(num_df).skew())
-num_df = np.log(num_df)
 data_all = pd.concat([data_all, languages_df, num_df], axis=1)
 
 
@@ -1232,36 +1207,6 @@ for col in ['title', 'tagline', 'overview', 'original_title']:
     data_all['len_' + col] = data_all[col].fillna('').apply(lambda x: len(str(x)))
     data_all['words_' + col] = data_all[col].fillna('').apply(lambda x: len(str(x.split(' '))))
 data_all = data_all.drop(['title', 'tagline', 'original_title', 'overview'], axis=1)
-#print(data_all['len_title'].skew())
-#print(np.log(data_all['len_title']).skew())
-#print(np.log1p(data_all['len_title']).skew()) #
-data_all['len_title'] = np.log1p(data_all['len_title'])
-#print(data_all['words_title'].skew())
-#print(np.log(data_all['words_title']).skew()) #
-#print(np.log1p(data_all['words_title']).skew())
-data_all['words_title'] = np.log(data_all['words_title'])
-#print(data_all['len_tagline'].skew())
-#print(np.log(data_all['len_tagline']).skew())
-#print(np.log1p(data_all['len_tagline']).skew()) #
-data_all['len_tagline'] = np.log1p(data_all['len_tagline'])
-#print(data_all['words_tagline'].skew())
-#print(np.log(data_all['words_tagline']).skew())
-#print(np.log1p(data_all['words_tagline']).skew()) #
-data_all['words_tagline'] = np.log1p(data_all['words_tagline'])
-#print(data_all['len_overview'].skew()) #
-#print(np.log(data_all['len_overview']).skew())
-#print(np.log1p(data_all['len_overview']).skew())
-#print(data_all['words_overview'].skew()) #
-#print(np.log(data_all['words_overview']).skew())
-#print(np.log1p(data_all['words_overview']).skew())
-#print(data_all['len_original_title'].skew())
-#print(np.log(data_all['len_original_title']).skew())
-#print(np.log1p(data_all['len_original_title']).skew()) #
-data_all['len_original_title'] = np.log1p(data_all['len_original_title'])
-#print(data_all['words_original_title'].skew())
-#print(np.log(data_all['words_original_title']).skew()) #
-#print(np.log1p(data_all['words_original_title']).skew())
-data_all['words_original_title'] = np.log(data_all['words_original_title'])
 
 
 
@@ -1293,7 +1238,6 @@ for i in range(0, len(data_all)):
         companies_df.iloc[i][name] = 1
 #丢弃data_all中的genres特征，然后合并新的genres_df
 data_all = data_all.drop(["production_companies"], axis=1)
-num_df = np.log(num_df)
 data_all = pd.concat([data_all, companies_df, num_df], axis=1)
 
 
@@ -1324,10 +1268,6 @@ for i in range(0, len(data_all)):
         name = str("Keywords="+name)
         Keywords_df.iloc[i][name] = 1
 data_all = data_all.drop(["Keywords"], axis=1)
-#print(num_df.skew())
-#print(np.log(num_df).skew())
-#print(np.log1p(num_df).skew())
-num_df = np.log1p(num_df)
 data_all = pd.concat([data_all, Keywords_df, num_df], axis=1)
 
 
@@ -1357,7 +1297,6 @@ for i in range(0, len(data_all)):
         name = dict_list[j]["name"]
         name = str("cast="+name)
         cast_df.iloc[i][name] = 1
-num_df = np.log1p(num_df)
 data_all = data_all.drop(["cast"], axis=1)
 data_all = pd.concat([data_all, cast_df, num_df], axis=1)
 
@@ -1389,10 +1328,6 @@ for i in range(0, len(data_all)):
         name = str("crew="+name)
         crew_df.iloc[i][name] = 1
 data_all = data_all.drop(["crew"], axis=1)
-num_df = np.log1p(num_df)
-#print(num_df.skew())
-#print(np.log(num_df).skew())
-#print(np.log1p(num_df).skew())
 data_all = pd.concat([data_all, crew_df, num_df], axis=1)
 
 print(data_all[data_all.isnull().values==True])
@@ -1409,8 +1344,8 @@ X_train_scaled = X_all_scaled[:len(data_train)]
 X_test_scaled = X_all_scaled[len(data_train):]
 Y_train = np.log1p(data_train["revenue"])
 #将数据进行存储吧，不然每次经过上述的特征提取实在太花费时间了
-X_train_scaled.to_csv("train_scaled_1.csv", index=False)
-X_test_scaled.to_csv("test_scaled_1.csv", index=False)
+X_train_scaled.to_csv("train_scaled_2.csv", index=False)
+X_test_scaled.to_csv("test_scaled_2.csv", index=False)
 end_time = datetime.datetime.now()
 print(X_train_scaled.shape)
 print("time cost", (end_time - start_time))
