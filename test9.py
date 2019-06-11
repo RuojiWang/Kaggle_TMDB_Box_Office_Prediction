@@ -1117,14 +1117,21 @@ def lasso_stacking_rscv_predict(nodes_list, data_test, stacked_train, Y_train, s
     #但是我个人觉得可能采用默认的值会取得更好的结果吧。
 
     save_best_model(random_search.best_estimator_, nodes_list[0]["title"]+"_"+str(len(nodes_list)))
+    Y_train_pred = random_search.best_estimator_.predict(stacked_train.values.astype(np.float32))
     Y_pred = random_search.best_estimator_.predict(stacked_test.values.astype(np.float32))    
     
     data = {"id":data_test["id"], "target":Y_pred}
     output = pd.DataFrame(data = data)            
     output.to_csv(nodes_list[0]["path"], index=False)
     print("prediction file has been written.")
+    
+    #这边不修改一下类型，绝壁是会报错的咯，反馈的错误太奇怪，导致调试花费了一些时间吧
+    rmse = cal_rmse(Y_train_pred, Y_train.values)
+    print(rmse)
+    rmsle = cal_rmsle(Y_train_pred, Y_train.values)
+    print(rmsle)
      
-    print("the best score of the model on the whole train dataset is:", best_score)
+    print("the best coefficient R^2 of the model on the whole train dataset is:", best_score)
     print()
     return random_search.best_estimator_, Y_pred
 
