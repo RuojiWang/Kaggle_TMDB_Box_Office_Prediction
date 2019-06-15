@@ -1,6 +1,9 @@
 #coding=utf-8
 #这个版本存在的意义主要是：我个人猜想我的之前版本的代码加上stacking应该能够取得更好的结果吧
 #另外一个方面之前做House Prices的时候拟合问题的感觉stacking效果不好试一下是不是代码问题咯。
+#我可真的是操了你老母了熬，我的笔记本上面居然这份代码直接考过去报错了，说的是lgb报错应该是X_train_scaled.columns的名字的缘故
+#我将lgb版本数据的X_train_scaled.columns和X_test_scaled的columns改了一下名字就可以运行了
+#然后late submit会显示提交次数也会显示成绩，但是不知道会不会显示更好的排名结果呢？如果可以显示的话或许有用。。。那么特征工程的部分就用Titanic吧
 import ast
 import math
 import pickle
@@ -1196,6 +1199,7 @@ def lasso_stacking_rscv_expm1_predict(nodes_list, data_test, stacked_train, Y_tr
 #原来那个自动创造特征的东西好像叫做auto feature engineering 
 #我现在感觉工作量很大的样子呀。。。。。
 
+"""
 #果然现在的问题是lgb的效果都很差。。还是自己太自信了吧，这个时间只能够做更多的超参搜索和加入特征选择的版本吧
 #这个是使用lgb进行超参搜索取得结果的部分
 data_train =  pd.read_csv("train.csv")
@@ -1278,7 +1282,6 @@ end_time = datetime.datetime.now()
 print("time cost", (end_time - start_time))
 print()
 
-
 start_time = datetime.datetime.now()
 data_train =  pd.read_csv("train.csv")
 data_test = pd.read_csv("test.csv")
@@ -1298,6 +1301,120 @@ best_cat_model = create_cat_model(best_cat_nodes, X_train_scaled, Y_train)
 #mxtend提供的stacking方式存在一个问题：每次超参搜索全部重新训练模型非常花费时间，所以只有自己实现相关的stacking咯
 #mlxtend_stacking([best_lgb_model, best_xgb_model, best_cat_model], X_train_scaled, Y_train, X_test_scaled)
 
+nodes_list = [best_lgb_nodes, best_xgb_nodes, best_cat_nodes] 
+models_list = [best_lgb_model, best_xgb_model, best_cat_model] 
+stacked_train, stacked_test = stacked_features_nonnn(models_list, X_train_scaled, Y_train, X_test_scaled, 2)
+save_stacked_dataset(stacked_train, stacked_test, "tmdb_box_office_prediction")
+lasso_stacking_rscv_expm1_predict(nodes_list, data_test, stacked_train, Y_train, stacked_test, 600)
+
+end_time = datetime.datetime.now()
+print("time cost", (end_time - start_time))
+"""
+
+#如果上面的代码不能够运行必然是因为lgb报错应该是X_train_scaled.columns的名字的缘故
+#我将lgb版本数据的X_train_scaled.columns和X_test_scaled的columns改了一下名字就可以运行了
+data_train =  pd.read_csv("train.csv")
+data_test = pd.read_csv("test.csv")
+Y_train = data_train["revenue"]
+X_train_scaled = pd.read_csv("train_scaled_1.csv")
+X_test_scaled = pd.read_csv("test_scaled_1.csv")
+#X_train_scaled = pd.read_csv("train_scaled_2.csv")
+#X_test_scaled = pd.read_csv("test_scaled_2.csv")
+
+X_train_scaled.columns = [(i+1) for i in range(0, len(X_train_scaled.columns))]
+X_test_scaled.columns = [(i+1) for i in range(0, len(X_test_scaled.columns))]
+
+Y_train = np.log1p(Y_train)
+cnt =0 
+start_time = datetime.datetime.now()
+trials = Trials()
+algo = partial(tpe.suggest, n_startup_jobs=10)
+best = fmin(lgb_f, lgb_space, algo=tpe.suggest, max_evals=1, trials=trials)
+best_lgb_nodes = parse_lgb_nodes(trials, lgb_space_nodes)
+save_inter_params(trials, lgb_space_nodes, best_lgb_nodes, "lgb_tmdb_box_office_prediction")
+rsg = train_lgb_model(best_lgb_nodes, X_train_scaled, Y_train)
+Y_pred = rsg.predict(X_test_scaled)
+Y_pred = np.expm1(Y_pred)
+data = {"id":data_test["id"], "revenue":Y_pred}
+output = pd.DataFrame(data = data)
+output.to_csv("lgb_predicton_1.csv", index=False)
+#output.to_csv("lgb_predicton_2_stacking.csv", index=False)
+end_time = datetime.datetime.now()
+print("time cost", (end_time - start_time))
+print()
+
+#这个是使用xgb进行超参搜索取得结果的部分
+data_train =  pd.read_csv("train.csv")
+data_test = pd.read_csv("test.csv")
+Y_train = data_train["revenue"]
+X_train_scaled = pd.read_csv("train_scaled_1.csv")
+X_test_scaled = pd.read_csv("test_scaled_1.csv")
+#X_train_scaled = pd.read_csv("train_scaled_2.csv")
+#X_test_scaled = pd.read_csv("test_scaled_2.csv")
+Y_train = np.log1p(Y_train)
+cnt = 0
+start_time = datetime.datetime.now()
+trials = Trials()
+algo = partial(tpe.suggest, n_startup_jobs=10)
+best = fmin(xgb_f, xgb_space, algo=tpe.suggest, max_evals=1, trials=trials)
+best_xgb_nodes = parse_xgb_nodes(trials, xgb_space_nodes)
+save_inter_params(trials, xgb_space_nodes, best_xgb_nodes, "xgb_tmdb_box_office_prediction")
+rsg = train_xgb_model(best_xgb_nodes, X_train_scaled, Y_train)
+Y_pred = rsg.predict(X_test_scaled)
+Y_pred = np.expm1(Y_pred)
+data = {"id":data_test["id"], "revenue":Y_pred}
+output = pd.DataFrame(data = data)
+output.to_csv("xgb_predicton_1.csv", index=False)
+#output.to_csv("xgb_predicton_2_stacking.csv", index=False)
+end_time = datetime.datetime.now()
+print("time cost", (end_time - start_time))
+print()
+
+#这个是cat进行超参搜索的版本
+data_train =  pd.read_csv("train.csv")
+data_test = pd.read_csv("test.csv")
+Y_train = data_train["revenue"]
+X_train_scaled = pd.read_csv("train_scaled_1.csv")
+X_test_scaled = pd.read_csv("test_scaled_1.csv")
+#X_train_scaled = pd.read_csv("train_scaled_2.csv")
+#X_test_scaled = pd.read_csv("test_scaled_2.csv")
+Y_train = np.log1p(Y_train)
+cnt = 0
+start_time = datetime.datetime.now()
+trials = Trials()
+algo = partial(tpe.suggest, n_startup_jobs=10)
+best = fmin(cat_f, cat_space, algo=tpe.suggest, max_evals=1, trials=trials)
+best_cat_nodes = parse_cat_nodes(trials, cat_space_nodes)
+save_inter_params(trials, cat_space_nodes, best_cat_nodes, "cat_tmdb_box_office_prediction")
+rsg = train_cat_model(best_cat_nodes, X_train_scaled, Y_train)
+Y_pred = rsg.predict(X_test_scaled)
+Y_pred = np.expm1(Y_pred)
+data = {"id":data_test["id"], "revenue":Y_pred}
+output = pd.DataFrame(data = data)
+output.to_csv("cat_predicton_1.csv", index=False)
+#output.to_csv("cat_predicton_2_stacking.csv", index=False)
+end_time = datetime.datetime.now()
+print("time cost", (end_time - start_time))
+print()
+
+start_time = datetime.datetime.now()
+data_train =  pd.read_csv("train.csv")
+data_test = pd.read_csv("test.csv")
+Y_train = data_train["revenue"]
+X_train_scaled = pd.read_csv("train_scaled_1.csv")
+X_test_scaled = pd.read_csv("test_scaled_1.csv")
+Y_train = np.log1p(Y_train)
+
+#进行stacking的部分，我之前看这个比赛别人都是blending还以为不适合stacking，其实回归问题以及这个比赛还是有stacking的
+trials, space_nodes, best_lgb_nodes = load_inter_params("lgb_tmdb_box_office_prediction")
+best_lgb_model = create_lgb_model(best_lgb_nodes, X_train_scaled, Y_train)
+trials, space_nodes, best_xgb_nodes = load_inter_params("xgb_tmdb_box_office_prediction")
+best_xgb_model = create_xgb_model(best_xgb_nodes, X_train_scaled, Y_train)
+trials, space_nodes, best_cat_nodes = load_inter_params("cat_tmdb_box_office_prediction")
+best_cat_model = create_cat_model(best_cat_nodes, X_train_scaled, Y_train)
+
+#mxtend提供的stacking方式存在一个问题：每次超参搜索全部重新训练模型非常花费时间，所以只有自己实现相关的stacking咯
+#mlxtend_stacking([best_lgb_model, best_xgb_model, best_cat_model], X_train_scaled, Y_train, X_test_scaled)
 nodes_list = [best_lgb_nodes, best_xgb_nodes, best_cat_nodes] 
 models_list = [best_lgb_model, best_xgb_model, best_cat_model] 
 stacked_train, stacked_test = stacked_features_nonnn(models_list, X_train_scaled, Y_train, X_test_scaled, 2)
